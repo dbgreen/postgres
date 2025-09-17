@@ -12592,4 +12592,9 @@
   proargnames => '{pid,io_id,io_generation,state,operation,off,length,target,handle_data_len,raw_result,result,target_desc,f_sync,f_localmem,f_buffered}',
   prosrc => 'pg_get_aios' },
 
+{ oid => '9991', descr => 'get CREATE ROLE statement for role by name',
+  proname => 'pg_get_roledef', prorettype => 'text', proargtypes => 'regrole',
+  prosrc => 'pg_get_roledef', proisstrict => 't', provolatile => 's',
+  proparallel => 's' },
+
 ]
