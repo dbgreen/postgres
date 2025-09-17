@@ -1,0 +1,8 @@
+--First we create a normal role to follow the defaults
+CREATE ROLE regress_following_defaults;
+SELECT pg_get_roledef('regress_following_defaults');
+                                                    pg_get_roledef                                                     
+-----------------------------------------------------------------------------------------------------------------------
+ CREATE ROLE regress_following_defaults NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+(1 row)
+
