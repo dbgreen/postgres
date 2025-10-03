@@ -557,46 +557,40 @@ pg_get_roledef(PG_FUNCTION_ARGS)
 	HeapTuple	tuple;
 	Form_pg_authid roleform;
 	StringInfoData buf;
-	char	   *rolname;
-	Datum		rolvaliduntil_datum;
-	bool		rolvaliduntil_isnull;
+	Datum		rolevaliduntil;
+	bool		isnull;
+	char	   *validuntil;
 
 	roleid = PG_GETARG_OID(0);
-	if (!OidIsValid(roleid))
-		PG_RETURN_NULL();
-	/* Look up the role in pg_authid */
 	tuple = SearchSysCache1(AUTHOID, ObjectIdGetDatum(roleid));
 	if (!HeapTupleIsValid(tuple)) /* Role not found */
-		PG_RETURN_NULL();
+	{
+		elog(ERROR, "role \"%u\" does not exist", roleid );
+	}
 
 	roleform = (Form_pg_authid) GETSTRUCT(tuple);
-	/* Extract role attributes */
-	rolname = NameStr(roleform->rolname);
-
-	rolvaliduntil_datum = SysCacheGetAttr(AUTHOID, tuple,
-										  Anum_pg_authid_rolvaliduntil,
-										  &rolvaliduntil_isnull);
 
 	/* Build the CREATE ROLE statement */
 	initStringInfo(&buf);
-	appendStringInfo(&buf, "CREATE ROLE %s", quote_identifier(rolname));
+	appendStringInfo(&buf, "CREATE ROLE %s", quote_identifier(NameStr(roleform->rolname)));
 
 	appendStringInfoString(&buf, (roleform->rolcanlogin) ?
 					" LOGIN" : " NOLOGIN");
 	appendStringInfoString(&buf, roleform->rolsuper ?
 					" SUPERUSER" : " NOSUPERUSER");
 
-	if (!rolvaliduntil_isnull)
+	rolevaliduntil = SysCacheGetAttr(AUTHOID, tuple,
+								  Anum_pg_authid_rolvaliduntil,
+								  &isnull);
+	if (!isnull)
 	{
-		char	   *validuntil_str;
-
-		validuntil_str = DatumGetCString(DirectFunctionCall1(timestamptz_out,
-															 rolvaliduntil_datum));
-		appendStringInfo(&buf, " VALID UNTIL %s", quote_literal_cstr(validuntil_str));
-		pfree(validuntil_str);
+		validuntil = DatumGetCString(DirectFunctionCall1(timestamptz_out,
+														 rolevaliduntil));
+		appendStringInfo(&buf, " VALID UNTIL %s", quote_literal_cstr(validuntil));
 	}
 
 	if (roleform->rolconnlimit >= 0)
+		/* -1 is the default and means no limit */
 		appendStringInfo(&buf, " CONNECTION LIMIT %d", roleform->rolconnlimit);
 
 	appendStringInfoString(&buf, roleform->rolcreatedb ?
