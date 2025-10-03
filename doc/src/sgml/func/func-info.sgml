@@ -2175,6 +2175,42 @@ SELECT currval(pg_get_serial_sequence('sometable', 'id'));
     </tgroup>
    </table>
 
+   <table id="functions-object-ddl-table">
+    <title>Object DDL Functions</title>
+    <tgroup cols="1">
+     <thead>
+      <row>
+       <entry role="func_table_entry"><para role="func_signature">Function</para>
+        <para>Description</para>
+       </entry>
+      </row>
+     </thead>
+     <tbody>
+      <row>
+       <entry role="func_table_entry">
+        <para role="func_signature">
+         <indexterm>
+          <primary>pg_get_roledef</primary>
+         </indexterm>
+         <function>pg_get_roledef</function> ( <parameter>role</parameter> <type>regrole</type> )
+         <returnvalue>text</returnvalue>
+        </para>
+        <para>
+         Returns the <command>CREATE ROLE</command> command that would recreate the given role.
+         The result is equivalent to the output that <application>pg_dumpall</application>
+         <option>-r</option> would produce for the specified role, except that password
+         information is omitted and never included in the output.
+        </para>
+        <para>
+         The function raises an error if the role does not exist. Also, it requires sufficient
+         privileges to view role information; typically this means the calling user must be a
+         superuser or have the <literal>pg_read_all_settings</literal> role.
+        </para>
+       </entry>
+      </row>
+     </tbody>
+    </tgroup>
+   </table>
   <para>
    Most of the functions that reconstruct (decompile) database objects
    have an optional <parameter>pretty</parameter> flag, which
