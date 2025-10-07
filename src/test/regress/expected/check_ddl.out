@@ -21,3 +21,6 @@ SELECT pg_get_roledef('regress_role_connlimit_valid_until');
 (1 row)
 
 RESET TIME ZONE;
+-- Test a reserved role, this should not work
+SELECT pg_get_roledef('pg_database_owner');
+ERROR:  role name "pg_database_owner" is reserved

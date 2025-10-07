@@ -10,3 +10,6 @@ CREATE ROLE regress_role_connlimit_valid_until CONNECTION LIMIT 64 VALID UNTIL '
 SET TIME ZONE 'utc';
 SELECT pg_get_roledef('regress_role_connlimit_valid_until');
 RESET TIME ZONE;
+
+-- Test a reserved role, this should not work
+SELECT pg_get_roledef('pg_database_owner');

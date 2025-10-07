@@ -559,7 +559,8 @@ pg_get_roledef(PG_FUNCTION_ARGS)
 	StringInfoData buf;
 	Datum		rolevaliduntil;
 	bool		isnull;
-	char	   *validuntil;
+	char		*rolname;
+	char		*validuntil;
 
 	roleid = PG_GETARG_OID(0);
 	tuple = SearchSysCache1(AUTHOID, ObjectIdGetDatum(roleid));
@@ -569,10 +570,16 @@ pg_get_roledef(PG_FUNCTION_ARGS)
 	}
 
 	roleform = (Form_pg_authid) GETSTRUCT(tuple);
+	rolname = NameStr(roleform->rolname);
+
+	if (strncmp(rolname, "pg_", 3) == 0)
+	{
+		elog(ERROR, "role name \"%s\" is reserved", rolname);
+	}
 
 	/* Build the CREATE ROLE statement */
 	initStringInfo(&buf);
-	appendStringInfo(&buf, "CREATE ROLE %s", quote_identifier(NameStr(roleform->rolname)));
+	appendStringInfo(&buf, "CREATE ROLE %s", quote_identifier(rolname));
 
 	appendStringInfoString(&buf, (roleform->rolcanlogin) ?
 					" LOGIN" : " NOLOGIN");
