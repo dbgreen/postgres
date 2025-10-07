@@ -30,6 +30,7 @@
 #include "catalog/pg_constraint.h"
 #include "catalog/pg_depend.h"
 #include "catalog/pg_language.h"
+#include "catalog/pg_namespace.h"
 #include "catalog/pg_opclass.h"
 #include "catalog/pg_operator.h"
 #include "catalog/pg_partitioned_table.h"
@@ -548,6 +549,73 @@ static void get_json_table_nested_columns(TableFunc *tf, JsonTablePlan *plan,
 										  bool needcomma);
 
 #define only_marker(rte)  ((rte)->inh ? "" : "ONLY ")
+
+Datum
+pg_get_roledef(PG_FUNCTION_ARGS)
+{
+	Oid			roleid;
+	HeapTuple	tuple;
+	Form_pg_authid roleform;
+	StringInfoData buf;
+	Datum		rolevaliduntil;
+	bool		isnull;
+	char		*rolname;
+	char		*validuntil;
+
+	roleid = PG_GETARG_OID(0);
+	tuple = SearchSysCache1(AUTHOID, ObjectIdGetDatum(roleid));
+	if (!HeapTupleIsValid(tuple)) /* Role not found */
+	{
+		elog(ERROR, "role \"%u\" does not exist", roleid );
+	}
+
+	roleform = (Form_pg_authid) GETSTRUCT(tuple);
+	rolname = NameStr(roleform->rolname);
+
+	if (strncmp(rolname, "pg_", 3) == 0)
+	{
+		elog(ERROR, "role name \"%s\" is reserved", rolname);
+	}
+
+	/* Build the CREATE ROLE statement */
+	initStringInfo(&buf);
+	appendStringInfo(&buf, "CREATE ROLE %s", quote_identifier(rolname));
+
+	appendStringInfoString(&buf, (roleform->rolcanlogin) ?
+					" LOGIN" : " NOLOGIN");
+	appendStringInfoString(&buf, roleform->rolsuper ?
+					" SUPERUSER" : " NOSUPERUSER");
+
+	rolevaliduntil = SysCacheGetAttr(AUTHOID, tuple,
+								  Anum_pg_authid_rolvaliduntil,
+								  &isnull);
+	if (!isnull)
+	{
+		validuntil = DatumGetCString(DirectFunctionCall1(timestamptz_out,
+														 rolevaliduntil));
+		appendStringInfo(&buf, " VALID UNTIL %s", quote_literal_cstr(validuntil));
+	}
+
+	if (roleform->rolconnlimit >= 0) /* -1 is the default and means no limit */
+		appendStringInfo(&buf, " CONNECTION LIMIT %d", roleform->rolconnlimit);
+
+	appendStringInfoString(&buf, roleform->rolcreatedb ?
+					" CREATEDB" : " NOCREATEDB");
+	appendStringInfoString(&buf, roleform->rolcreaterole ?
+					" CREATEROLE" : " NOCREATEROLE");
+	appendStringInfoString(&buf, roleform->rolinherit ?
+					" INHERIT" : " NOINHERIT");
+	appendStringInfoString(&buf, roleform->rolreplication ?
+					" REPLICATION" : " NOREPLICATION");
+	appendStringInfoString(&buf, roleform->rolbypassrls ?
+					" BYPASSRLS" : " NOBYPASSRLS");
+
+	/* Note: We don't include the password hash for security reasons */
+
+	appendStringInfoChar(&buf, ';');
+	ReleaseSysCache(tuple);
+	PG_RETURN_TEXT_P(cstring_to_text(buf.data));
+}
 
 
 /* ----------

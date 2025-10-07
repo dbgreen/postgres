@@ -1,0 +1,26 @@
+--First we create a normal role to follow the defaults
+CREATE ROLE regress_following_defaults;
+SELECT pg_get_roledef('regress_following_defaults');
+                                                    pg_get_roledef                                                     
+-----------------------------------------------------------------------------------------------------------------------
+ CREATE ROLE regress_following_defaults NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+(1 row)
+
+--Then we query using a non-existing role
+SELECT pg_get_roledef('regress_non_existing_role');
+ERROR:  role "regress_non_existing_role" does not exist
+LINE 1: SELECT pg_get_roledef('regress_non_existing_role');
+                              ^
+-- Test role with CONNECTION LIMIT and VALID UNTIL in UTC
+CREATE ROLE regress_role_connlimit_valid_until CONNECTION LIMIT 64 VALID UNTIL '2038-01-18 00:00:00-00';
+SET TIME ZONE 'utc';
+SELECT pg_get_roledef('regress_role_connlimit_valid_until');
+                                                                                        pg_get_roledef                                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ CREATE ROLE regress_role_connlimit_valid_until NOLOGIN NOSUPERUSER VALID UNTIL 'Mon Jan 18 00:00:00 2038 UTC' CONNECTION LIMIT 64 NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+(1 row)
+
+RESET TIME ZONE;
+-- Test a reserved role, this should not work
+SELECT pg_get_roledef('pg_database_owner');
+ERROR:  role name "pg_database_owner" is reserved
