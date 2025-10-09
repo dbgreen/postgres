@@ -297,3 +297,158 @@ DROP FUNCTION myvarcharsend(myvarchar);  -- fail
 DROP TYPE myvarchar;  -- fail
 
 DROP TYPE myvarchar CASCADE;
+
+-- Test using the pg_get_type_ddl function
+-- Test NULL value
+SELECT pg_get_type_ddl(NULL);
+
+-- Non-existing type should fail
+SELECT pg_get_type_ddl('i_dont_exist');
+
+-- Test the shell type
+CREATE TYPE my_test;
+SELECT pg_get_type_ddl('my_test');
+
+-- Pseudo-types should fail
+SELECT pg_get_type_ddl('void');
+SELECT pg_get_type_ddl('record');
+
+-- Built-in types with special properties should succeed
+-- should show storage = extended, preferred = true, collatable = true
+SELECT pg_get_type_ddl('text');
+
+-- Domain types should fail
+CREATE DOMAIN my_domain AS varchar;
+SELECT pg_get_type_ddl('my_domain');
+
+-- Multirange types should fail
+SELECT pg_get_type_ddl('int4multirange');
+
+-- Enum types should succeed
+CREATE TYPE test_enum AS ENUM ('red', 'green', 'blue');
+SELECT pg_get_type_ddl('test_enum');
+
+-- Composite types should succeed
+CREATE TYPE test_address AS (
+   street text,
+   city text,
+   state text,
+   zip text
+);
+SELECT pg_get_type_ddl('test_address');
+
+-- Composite type with collation should succeed
+CREATE TYPE test_composite_collate AS (
+    field1 text COLLATE "C"
+);
+SELECT pg_get_type_ddl('test_composite_collate');
+
+-- Range types should succeed
+SELECT pg_get_type_ddl('int4range');
+
+-- Custom range type with default multirange name should succeed
+CREATE TYPE my_custom_range AS RANGE (
+    subtype = integer
+);
+SELECT pg_get_type_ddl('my_custom_range');
+
+-- Custom range type with custom multirange name should succeed
+CREATE TYPE test_custom_multirange AS RANGE (
+    subtype = integer,
+    multirange_type_name = my_custom_name
+);
+SELECT pg_get_type_ddl('test_custom_multirange');
+
+-- Base type with minimal options should succeed
+CREATE FUNCTION test_base_in(cstring) RETURNS test_base_type
+AS 'int4in' LANGUAGE internal IMMUTABLE STRICT;
+
+CREATE FUNCTION test_base_out(test_base_type) RETURNS cstring
+AS 'int4out' LANGUAGE internal IMMUTABLE STRICT;
+
+CREATE TYPE test_base_type (
+   INPUT = test_base_in,
+   OUTPUT = test_base_out,
+   INTERNALLENGTH = 4,
+   PASSEDBYVALUE
+);
+SELECT pg_get_type_ddl('test_base_type');
+
+-- Base type with many option should succeed
+CREATE FUNCTION test_complex_in(cstring) RETURNS test_complex_type
+AS 'int4in' LANGUAGE internal IMMUTABLE STRICT;
+
+CREATE FUNCTION test_complex_out(test_complex_type) RETURNS cstring
+AS 'int4out' LANGUAGE internal IMMUTABLE STRICT;
+
+CREATE FUNCTION test_complex_recv(internal) RETURNS test_complex_type
+AS 'int4recv' LANGUAGE internal IMMUTABLE STRICT;
+
+CREATE FUNCTION test_complex_send(test_complex_type) RETURNS bytea
+AS 'int4send' LANGUAGE internal IMMUTABLE STRICT;
+
+CREATE TYPE test_complex_type (
+   INPUT = test_complex_in,
+   OUTPUT = test_complex_out,
+   RECEIVE = test_complex_recv,
+   SEND = test_complex_send,
+   INTERNALLENGTH = 4,
+   ALIGNMENT = int4,
+   STORAGE = plain,
+   PASSEDBYVALUE,
+   CATEGORY = 'N',
+   PREFERRED = false
+);
+SELECT pg_get_type_ddl('test_complex_type');
+
+-- Base type with storage options should succeed
+CREATE FUNCTION test_storage_in(cstring) RETURNS test_storage_type
+AS 'textin' LANGUAGE internal IMMUTABLE STRICT;
+
+CREATE FUNCTION test_storage_out(test_storage_type) RETURNS cstring
+AS 'textout' LANGUAGE internal IMMUTABLE STRICT;
+
+CREATE TYPE test_storage_type (
+   INPUT = test_storage_in,
+   OUTPUT = test_storage_out,
+   INTERNALLENGTH = VARIABLE,
+   STORAGE = extended
+);
+SELECT pg_get_type_ddl('test_storage_type');
+
+-- Base type with delimiter should succeed
+CREATE FUNCTION test_delim_in(cstring) RETURNS test_delim_type
+AS 'int4in' LANGUAGE internal IMMUTABLE STRICT;
+
+CREATE FUNCTION test_delim_out(test_delim_type) RETURNS cstring
+AS 'int4out' LANGUAGE internal IMMUTABLE STRICT;
+
+CREATE TYPE test_delim_type (
+   INPUT = test_delim_in,
+   OUTPUT = test_delim_out,
+   INTERNALLENGTH = 4,
+   DELIMITER = ';'
+);
+SELECT pg_get_type_ddl('test_delim_type');
+
+-- Test types with different schemas
+CREATE SCHEMA test_schema;
+CREATE TYPE test_schema.test_enum AS (f1 int4, f2 text);
+SET search_path TO test_schema, public;
+SELECT pg_get_type_ddl('test_enum');
+RESET search_path;
+
+-- Clean up
+DROP TYPE my_test;
+DROP TYPE my_domain;
+DROP TYPE test_enum;
+DROP TYPE test_address;
+DROP TYPE test_composite_collate;
+DROP TYPE my_custom_range;
+DROP TYPE test_custom_multirange;
+DROP TYPE test_base_type CASCADE;
+DROP TYPE test_complex_type CASCADE;
+DROP TYPE test_storage_type CASCADE;
+DROP TYPE test_delim_type CASCADE;
+DROP TYPE test_schema.test_enum;
+DROP SCHEMA test_schema;
