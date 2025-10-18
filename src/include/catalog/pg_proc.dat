@@ -12591,10 +12591,32 @@
   proargmodes => '{o,o,o,o,o,o,o,o,o,o,o,o,o,o,o}',
   proargnames => '{pid,io_id,io_generation,state,operation,off,length,target,handle_data_len,raw_result,result,target_desc,f_sync,f_localmem,f_buffered}',
   prosrc => 'pg_get_aios' },
+# pg_get_role_ddl - return DDL to recreate a role (compact format)
+{ oid => '9991', descr => 'get SQL commands to recreate role',
+  proname => 'pg_get_role_ddl', prorettype => 'text', proargtypes => 'regrole',
+  prosrc => 'pg_get_role_ddl', proisstrict => 't', provolatile => 's',
+  proparallel => 's' },
 
-{ oid => '9991', descr => 'get CREATE ROLE statement for role by name',
-  proname => 'pg_get_roledef', prorettype => 'text', proargtypes => 'regrole',
-  prosrc => 'pg_get_roledef', proisstrict => 't', provolatile => 's',
+# pg_get_role_ddl - return DDL to recreate a role (with pretty-print option)
+{ oid => '9992', descr => 'get SQL commands to recreate role',
+  proname => 'pg_get_role_ddl', prorettype => 'text',
+  proargtypes => 'regrole bool', proargnames => '{roleid,pretty}',
+  prosrc => 'pg_get_role_ddl', proisstrict => 't', provolatile => 's',
+  proparallel => 's' },
+
+# pg_get_role_ddl_statements - return DDL as separate statements (compact format)
+{ oid => '9993', descr => 'get SQL commands to recreate role as row set',
+  proname => 'pg_get_role_ddl_statements', prorows => '10', proretset => 't',
+  prorettype => 'text', proargtypes => 'regrole',
+  prosrc => 'pg_get_role_ddl_statements', proisstrict => 't', provolatile => 's',
+  proparallel => 's' },
+
+# pg_get_role_ddl_statements - return DDL as separate statements (with pretty-print option)
+{ oid => '9994', descr => 'get SQL commands to recreate role as row set',
+  proname => 'pg_get_role_ddl_statements', prorows => '10', proretset => 't',
+  prorettype => 'text', proargtypes => 'regrole bool',
+  proargnames => '{roleid,pretty}',
+  prosrc => 'pg_get_role_ddl_statements', proisstrict => 't', provolatile => 's',
   proparallel => 's' },
 
 ]

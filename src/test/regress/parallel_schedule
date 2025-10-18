@@ -83,7 +83,7 @@ test: create_table_like alter_generic alter_operator misc async dbsize merge mis
 # --------------
 # Check that we can get the different DDL to re-create statements
 # --------------
-test: check_ddl
+test: check_role_ddl
 
 # collate.linux.utf8 and collate.icu.utf8 tests cannot be run in parallel with each other
 test: rules psql psql_crosstab psql_pipeline amutils stats_ext collate.linux.utf8 collate.windows.win1252

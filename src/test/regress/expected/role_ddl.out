@@ -1,0 +1,108 @@
+DROP ROLE
+DROP ROLE
+DROP ROLE
+DROP ROLE
+DROP ROLE
+DROP ROLE
+DROP ROLE
+DROP DATABASE
+CREATE DATABASE
+CREATE ROLE
+                                         pg_get_role_ddl                                          
+--------------------------------------------------------------------------------------------------
+ CREATE ROLE test1 NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+(1 row)
+
+  pg_get_role_ddl  
+-------------------
+ CREATE ROLE test1+
+   NOLOGIN        +
+   NOSUPERUSER    +
+   NOCREATEDB     +
+   NOCREATEROLE   +
+   INHERIT        +
+   NOREPLICATION  +
+   NOBYPASSRLS;
+(1 row)
+
+                                         pg_get_role_ddl                                          
+--------------------------------------------------------------------------------------------------
+ CREATE ROLE test1 NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+(1 row)
+
+CREATE ROLE
+                                        pg_get_role_ddl                                         
+------------------------------------------------------------------------------------------------
+ CREATE ROLE test2 LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+(1 row)
+
+CREATE ROLE
+                                                                 pg_get_role_ddl                                                                  
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ CREATE ROLE test3 LOGIN SUPERUSER CREATEDB CREATEROLE INHERIT NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 5 VALID UNTIL '2030-12-31 23:59:59+00';
+(1 row)
+
+CREATE ROLE
+ALTER ROLE
+ALTER ROLE
+                                         pg_get_role_ddl                                          
+--------------------------------------------------------------------------------------------------
+ CREATE ROLE test4 NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;+
+ ALTER ROLE test4 SET work_mem TO '256MB';                                                       +
+ ALTER ROLE test4 SET search_path TO '"myschema, public"';
+(1 row)
+
+CREATE ROLE
+ALTER ROLE
+                                         pg_get_role_ddl                                          
+--------------------------------------------------------------------------------------------------
+ CREATE ROLE test5 NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;+
+ ALTER ROLE test5 IN DATABASE role_ddl_test SET work_mem TO '128MB';
+(1 row)
+
+                                    pg_get_role_ddl_statements                                    
+--------------------------------------------------------------------------------------------------
+ CREATE ROLE test4 NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+ ALTER ROLE test4 SET work_mem TO '256MB';
+ ALTER ROLE test4 SET search_path TO '"myschema, public"';
+(3 rows)
+
+                pg_get_role_ddl_statements                 
+-----------------------------------------------------------
+ CREATE ROLE test4                                        +
+   NOLOGIN                                                +
+   NOSUPERUSER                                            +
+   NOCREATEDB                                             +
+   NOCREATEROLE                                           +
+   INHERIT                                                +
+   NOREPLICATION                                          +
+   NOBYPASSRLS;
+ ALTER ROLE test4 SET work_mem TO '256MB';
+ ALTER ROLE test4 SET search_path TO '"myschema, public"';
+(3 rows)
+
+                                    pg_get_role_ddl_statements                                    
+--------------------------------------------------------------------------------------------------
+ CREATE ROLE test4 NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+ ALTER ROLE test4 SET work_mem TO '256MB';
+ ALTER ROLE test4 SET search_path TO '"myschema, public"';
+(3 rows)
+
+CREATE ROLE
+                                               pg_get_role_ddl                                               
+-------------------------------------------------------------------------------------------------------------
+ CREATE ROLE "role-with-dash" NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+(1 row)
+
+ pg_get_role_ddl 
+-----------------
+ 
+(1 row)
+
+DROP ROLE
+DROP ROLE
+DROP ROLE
+DROP ROLE
+DROP ROLE
+DROP ROLE
+DROP DATABASE
