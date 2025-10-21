@@ -1,16 +1,3 @@
--- Drop test roles if they exist
-DROP ROLE IF EXISTS test1;
-DROP ROLE IF EXISTS test2;
-DROP ROLE IF EXISTS test3;
-DROP ROLE IF EXISTS test4;
-DROP ROLE IF EXISTS test5;
-DROP ROLE IF EXISTS "role-with-dash";
-DROP ROLE IF EXISTS "Role With Spaces";
-
--- Drop test database if it exists
-DROP DATABASE IF EXISTS role_ddl_test;
-
-
 -- Create test database
 CREATE DATABASE role_ddl_test;
 
