@@ -1,11 +1,3 @@
-DROP ROLE
-DROP ROLE
-DROP ROLE
-DROP ROLE
-DROP ROLE
-DROP ROLE
-DROP ROLE
-DROP DATABASE
 CREATE DATABASE
 CREATE ROLE
                                          pg_get_role_ddl                                          
