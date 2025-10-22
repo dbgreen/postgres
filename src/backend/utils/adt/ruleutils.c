@@ -20,6 +20,7 @@
 #include <fcntl.h>
 
 #include "access/amapi.h"
+#include "access/genam.h"
 #include "access/htup_details.h"
 #include "access/relation.h"
 #include "access/table.h"
@@ -28,9 +29,11 @@
 #include "catalog/pg_authid.h"
 #include "catalog/pg_collation.h"
 #include "catalog/pg_constraint.h"
+#include "catalog/pg_db_role_setting.h"
 #include "catalog/pg_depend.h"
 #include "catalog/pg_enum.h"
 #include "catalog/pg_language.h"
+#include "catalog/pg_namespace.h"
 #include "catalog/pg_opclass.h"
 #include "catalog/pg_operator.h"
 #include "catalog/pg_partitioned_table.h"
@@ -61,6 +64,7 @@
 #include "rewrite/rewriteSupport.h"
 #include "utils/array.h"
 #include "utils/builtins.h"
+#include "utils/datetime.h"
 #include "utils/fmgroids.h"
 #include "utils/guc.h"
 #include "utils/hsearch.h"
@@ -70,6 +74,7 @@
 #include "utils/ruleutils.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
+#include "utils/timestamp.h"
 #include "utils/typcache.h"
 #include "utils/varlena.h"
 #include "utils/xml.h"
@@ -551,6 +556,348 @@ static void get_json_table_nested_columns(TableFunc *tf, JsonTablePlan *plan,
 
 #define only_marker(rte)  ((rte)->inh ? "" : "ONLY ")
 
+/*
+ * pg_get_role_ddl_internal
+ *		Generate DDL statements to recreate a role
+ *
+ * Returns a List of palloc'd strings, each being a complete SQL statement.
+ * The first list element is always the CREATE ROLE statement; subsequent
+ * elements are ALTER ROLE SET statements for any role-specific or
+ * role-in-database configuration settings.
+ *
+ * If 'pretty' is true, the CREATE ROLE statement is formatted with each
+ * attribute on a separate indented line; otherwise everything is on one line.
+ * ALTER statements are unaffected by the pretty flag.
+ *
+ * Returns NIL if the role OID is invalid.  This can happen if the role was
+ * dropped concurrently, or if we're passed a OID that doesn't match
+ * any role.
+ */
+static List *
+pg_get_role_ddl_internal(Oid roleid, bool pretty)
+{
+	HeapTuple	tuple;
+	Form_pg_authid roleform;
+	StringInfoData buf;
+	char	   *rolname;
+	Datum		rolevaliduntil;
+	bool		isnull;
+	Relation	rel;
+	ScanKeyData scankey;
+	SysScanDesc scan;
+	HeapTuple	setting_tuple;
+	List	   *statements = NIL;
+	const char *separator = pretty ? "\n  " : " ";
+
+	tuple = SearchSysCache1(AUTHOID, ObjectIdGetDatum(roleid));
+	if (!HeapTupleIsValid(tuple))
+		return NIL;
+
+	roleform = (Form_pg_authid) GETSTRUCT(tuple);
+	rolname = NameStr(roleform->rolname);
+
+	/*
+	 * We don't support generating DDL for system roles.  The primary reason
+	 * for this is that users shouldn't be recreating them.
+	 */
+	if (strncmp(rolname, "pg_", 3) == 0)
+		ereport(ERROR,
+				(errcode(ERRCODE_RESERVED_NAME),
+				 errmsg("role name \"%s\" is reserved", rolname),
+				 errdetail("Role names starting with \"pg_\" are reserved for system roles.")));
+
+	/* Build the CREATE ROLE statement */
+	initStringInfo(&buf);
+	appendStringInfo(&buf, "CREATE ROLE %s", quote_identifier(rolname));
+
+	/*
+	 * Append role attributes.  The order here follows the same sequence as
+	 * you'd typically write them in a CREATE ROLE command, though any order
+	 * is actually acceptable to the parser.
+	 */
+	appendStringInfo(&buf, "%s%s", separator,
+					 roleform->rolcanlogin ? "LOGIN" : "NOLOGIN");
+
+	appendStringInfo(&buf, "%s%s", separator,
+					 roleform->rolsuper ? "SUPERUSER" : "NOSUPERUSER");
+
+	appendStringInfo(&buf, "%s%s", separator,
+					 roleform->rolcreatedb ? "CREATEDB" : "NOCREATEDB");
+
+	appendStringInfo(&buf, "%s%s", separator,
+					 roleform->rolcreaterole ? "CREATEROLE" : "NOCREATEROLE");
+
+	appendStringInfo(&buf, "%s%s", separator,
+					 roleform->rolinherit ? "INHERIT" : "NOINHERIT");
+
+	appendStringInfo(&buf, "%s%s", separator,
+					 roleform->rolreplication ? "REPLICATION" : "NOREPLICATION");
+
+	appendStringInfo(&buf, "%s%s", separator,
+					 roleform->rolbypassrls ? "BYPASSRLS" : "NOBYPASSRLS");
+
+	/*
+	 * CONNECTION LIMIT is only interesting if it's not -1 (the default,
+	 * meaning no limit).
+	 */
+	if (roleform->rolconnlimit >= 0)
+		appendStringInfo(&buf, "%sCONNECTION LIMIT %d",
+						 separator, roleform->rolconnlimit);
+
+	rolevaliduntil = SysCacheGetAttr(AUTHOID, tuple,
+									 Anum_pg_authid_rolvaliduntil,
+									 &isnull);
+	if (!isnull)
+	{
+		struct pg_tm tm;
+		fsec_t		fsec;
+		int			tz;
+		char		ts_str[MAXDATELEN + 1];
+
+		if (timestamp2tm(rolevaliduntil, &tz, &tm, &fsec, NULL, NULL) == 0)
+		{
+			EncodeDateTime(&tm, fsec, true, tz, NULL, DateStyle, ts_str);
+			appendStringInfo(&buf, "%sVALID UNTIL %s",
+							 separator, quote_literal_cstr(ts_str));
+		}
+	}
+
+	/*
+	 * We intentionally omit PASSWORD.  There's no way to retrieve the
+	 * original password text from the stored hash, and even if we could,
+	 * exposing passwords through a SQL function would be a security issue.
+	 * Users must set passwords separately after recreating roles.
+	 */
+
+	appendStringInfoChar(&buf, ';');
+
+	statements = lappend(statements, pstrdup(buf.data));
+
+	ReleaseSysCache(tuple);
+
+	/*
+	 * Now scan pg_db_role_setting for ALTER ROLE SET configurations.
+	 *
+	 * These can be role-wide (setdatabase = 0) or specific to a particular
+	 * database (setdatabase = a valid DB OID).  We generate one ALTER
+	 * statement per setting, which isn't as compact as it could be, but is
+	 * straightforward and matches how users typically set these up.
+	 */
+	rel = table_open(DbRoleSettingRelationId, AccessShareLock);
+	ScanKeyInit(&scankey,
+				Anum_pg_db_role_setting_setrole,
+				BTEqualStrategyNumber, F_OIDEQ,
+				ObjectIdGetDatum(roleid));
+	scan = systable_beginscan(rel, DbRoleSettingDatidRolidIndexId, true,
+							  NULL, 1, &scankey);
+
+	while (HeapTupleIsValid(setting_tuple = systable_getnext(scan)))
+	{
+		Form_pg_db_role_setting setting = (Form_pg_db_role_setting) GETSTRUCT(setting_tuple);
+		Oid			datid = setting->setdatabase;
+		Datum		datum;
+		bool		setting_isnull;
+		ArrayType  *settings;
+		int			i;
+		char	   *datname = NULL;
+
+		/*
+		 * The setconfig column is a text array in "name=value" format. It
+		 * should never be null for a valid row, but be defensive.
+		 */
+		datum = heap_getattr(setting_tuple, Anum_pg_db_role_setting_setconfig,
+							 RelationGetDescr(rel), &setting_isnull);
+		if (setting_isnull)
+			continue;
+
+		settings = DatumGetArrayTypeP(datum);
+
+		/*
+		 * If setdatabase is valid, this is a role-in-database setting;
+		 * otherwise it's a role-wide setting.  Look up the database name once
+		 * for all settings in this row.
+		 */
+		if (OidIsValid(datid))
+		{
+			datname = get_database_name(datid);
+			if (datname == NULL)
+			{
+				/*
+				 * Database has been dropped; skip all settings in this row.
+				 */
+				continue;
+			}
+		}
+
+		/* Process each setting in the array */
+		for (i = 1; i <= ArrayGetNItems(ARR_NDIM(settings), ARR_DIMS(settings)); i++)
+		{
+			Datum		setting_datum;
+			bool		setting_elem_isnull;
+			char	   *setting_str;
+			char	   *equals_pos;
+
+			setting_datum = array_ref(settings, 1, &i,
+									  -1 /* varlenarray */ ,
+									  -1 /* TEXT's typlen */ ,
+									  false /* TEXT's typbyval */ ,
+									  TYPALIGN_INT /* TEXT's typalign */ ,
+									  &setting_elem_isnull);
+
+			if (setting_elem_isnull)
+				continue;
+
+			setting_str = TextDatumGetCString(setting_datum);
+
+			/*
+			 * Parse out the parameter name and value.  The format should
+			 * always be "name=value" but check anyway to avoid a crash if the
+			 * catalog is corrupted.
+			 */
+			equals_pos = strchr(setting_str, '=');
+			if (equals_pos == NULL)
+			{
+				pfree(setting_str);
+				continue;
+			}
+
+			*equals_pos = '\0';
+
+			/* Build a fresh ALTER ROLE statement for this setting */
+			resetStringInfo(&buf);
+			appendStringInfo(&buf, "ALTER ROLE %s", quote_identifier(rolname));
+
+			if (datname != NULL)
+				appendStringInfo(&buf, " IN DATABASE %s",
+								 quote_identifier(datname));
+
+			appendStringInfo(&buf, " SET %s TO %s;",
+							 quote_identifier(setting_str),
+							 quote_literal_cstr(equals_pos + 1));
+
+			statements = lappend(statements, pstrdup(buf.data));
+
+			pfree(setting_str);
+		}
+
+		if (datname != NULL)
+			pfree(datname);
+	}
+
+	systable_endscan(scan);
+	table_close(rel, AccessShareLock);
+
+	pfree(buf.data);
+
+	return statements;
+}
+
+
+/*
+ * pg_get_role_ddl
+ *		Return DDL to recreate a role as a single text string
+ *
+ * This is the main user-facing function.  It calls pg_get_role_ddl_internal
+ * to get the list of statements, then concatenates them with newlines.
+ *
+ * The pretty parameter controls formatting of the CREATE ROLE statement.
+ * If omitted, it defaults to true.
+ *
+ * Returns NULL if the role OID doesn't exist.  This can only happen if
+ * you pass a OID rather than using the regrole type, or if there's
+ * a race condition with a concurrent DROP ROLE.
+ */
+Datum
+pg_get_role_ddl(PG_FUNCTION_ARGS)
+{
+	Oid			roleid = PG_GETARG_OID(0);
+	bool		pretty = true;
+	List	   *statements;
+	StringInfoData result;
+	ListCell   *lc;
+	bool		first = true;
+
+	/* Check if pretty-print parameter was provided */
+	if (PG_NARGS() > 1)
+		pretty = PG_GETARG_BOOL(1);
+
+	statements = pg_get_role_ddl_internal(roleid, pretty);
+
+	if (statements == NIL)
+		PG_RETURN_NULL();
+
+	initStringInfo(&result);
+
+	foreach(lc, statements)
+	{
+		char	   *stmt = (char *) lfirst(lc);
+
+		if (!first)
+			appendStringInfoChar(&result, '\n');
+		appendStringInfoString(&result, stmt);
+		first = false;
+	}
+
+	list_free_deep(statements);
+
+	PG_RETURN_TEXT_P(cstring_to_text(result.data));
+}
+
+/*
+ * pg_get_role_ddl_statements
+ *		Return DDL to recreate a role as a set of rows
+ *
+ * This is similar to pg_get_role_ddl, but returns each statement as a
+ * separate row.  This is useful for programmatic processing or when you
+ * want to filter/analyze individual statements.
+ *
+ * Like pg_get_role_ddl, it accepts an optional pretty parameter.
+ */
+Datum
+pg_get_role_ddl_statements(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	List	   *statements;
+	ListCell   *lc;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		MemoryContext oldcontext;
+		Oid			roleid = PG_GETARG_OID(0);
+		bool		pretty = true;
+
+		/* Check if pretty-print parameter was provided */
+		if (PG_NARGS() > 1)
+			pretty = PG_GETARG_BOOL(1);
+
+		funcctx = SRF_FIRSTCALL_INIT();
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		statements = pg_get_role_ddl_internal(roleid, pretty);
+		funcctx->user_fctx = statements;
+		funcctx->max_calls = list_length(statements);
+
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	statements = (List *) funcctx->user_fctx;
+
+	if (funcctx->call_cntr < funcctx->max_calls)
+	{
+		char	   *stmt;
+
+		lc = list_nth_cell(statements, funcctx->call_cntr);
+		stmt = (char *) lfirst(lc);
+
+		SRF_RETURN_NEXT(funcctx, CStringGetTextDatum(stmt));
+	}
+	else
+	{
+		list_free_deep(statements);
+		SRF_RETURN_DONE(funcctx);
+	}
+}
 
 /* ----------
  * pg_get_ruledef		- Do it all and return a text

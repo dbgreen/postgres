@@ -2175,6 +2175,77 @@ SELECT currval(pg_get_serial_sequence('sometable', 'id'));
     </tgroup>
    </table>
 
+   <table id="functions-object-ddl-table">
+    <title>Object DDL Functions</title>
+    <tgroup cols="1">
+     <thead>
+      <row>
+       <entry role="func_table_entry"><para role="func_signature">Function</para>
+        <para>Description</para>
+       </entry>
+      </row>
+     </thead>
+     <tbody>
+      <row>
+       <entry role="func_table_entry">
+        <para role="func_signature">
+         <indexterm>
+          <primary>pg_get_role_ddl</primary>
+         </indexterm>
+         <function>pg_get_role_ddl</function> ( <parameter>role</parameter> <type>regrole</type> <optional>, <parameter>pretty</parameter> <type>boolean</type> </optional> )
+         <returnvalue>text</returnvalue>
+        </para>
+        <para>
+         Returns the DDL commands that would recreate the given role as a single text string.
+         The result includes the <command>CREATE ROLE</command> statement and any
+         <command>ALTER ROLE</command> statements needed to set role configuration parameters.
+         Password information is never included in the output.
+        </para>
+        <para>
+         The optional <parameter>pretty</parameter> parameter controls formatting of the
+         <command>CREATE ROLE</command> statement. If <literal>true</literal> (the default),
+         the statement is formatted with newlines and indentation for readability. If
+         <literal>false</literal>, the statement is formatted as a single line.
+        </para>
+        <para>
+         Returns <literal>NULL</literal> if the role does not exist. The function requires
+         sufficient privileges to view role information; typically this means the calling
+         user must be a superuser or have the <literal>pg_read_all_settings</literal> role.
+        </para>
+       </entry>
+      </row>
+      <row>
+       <entry role="func_table_entry">
+        <para role="func_signature">
+         <indexterm>
+          <primary>pg_get_role_ddl_statements</primary>
+         </indexterm>
+         <function>pg_get_role_ddl_statements</function> ( <parameter>role</parameter> <type>regrole</type> <optional>, <parameter>pretty</parameter> <type>boolean</type> </optional> )
+         <returnvalue>setof text</returnvalue>
+        </para>
+        <para>
+         Returns the DDL commands that would recreate the given role as a set of rows,
+         with each statement returned as a separate row. The first row contains the
+         <command>CREATE ROLE</command> statement, followed by any <command>ALTER ROLE</command>
+         statements needed to set role configuration parameters. This format is useful for
+         programmatic processing or when you want to filter or analyze individual statements.
+        </para>
+        <para>
+         The optional <parameter>pretty</parameter> parameter controls formatting of the
+         <command>CREATE ROLE</command> statement. If <literal>true</literal> (the default),
+         the statement is formatted with newlines and indentation for readability. If
+         <literal>false</literal>, the statement is formatted as a single line.
+        </para>
+        <para>
+         Returns an empty set if the role does not exist. The function requires
+         sufficient privileges to view role information; typically this means the calling
+         user must be a superuser or have the <literal>pg_read_all_settings</literal> role.
+        </para>
+       </entry>
+      </row>
+     </tbody>
+    </tgroup>
+	</table>
   <para>
    Most of the functions that reconstruct (decompile) database objects
    have an optional <parameter>pretty</parameter> flag, which
