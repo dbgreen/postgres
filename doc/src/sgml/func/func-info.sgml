@@ -2174,7 +2174,7 @@ SELECT currval(pg_get_serial_sequence('sometable', 'id'));
      </tbody>
     </tgroup>
    </table>
-   <table id="functions-object-ddl-table">
+  <table id="functions-object-ddl-table">
     <title>Object DDL Functions</title>
     <tgroup cols="1">
      <thead>
@@ -2191,7 +2191,7 @@ SELECT currval(pg_get_serial_sequence('sometable', 'id'));
          <indexterm>
           <primary>pg_get_role_ddl</primary>
          </indexterm>
-         <function>pg_get_role_ddl</function> ( <parameter>role</parameter> <type>regrole</type> <optional> )
+         <function>pg_get_role_ddl</function> ( <parameter>role</parameter> <type>regrole</type> )
          <returnvalue>text</returnvalue>
         </para>
         <para>
@@ -2201,9 +2201,7 @@ SELECT currval(pg_get_serial_sequence('sometable', 'id'));
          Password information is never included in the output.
         </para>
         <para>
-         Returns <literal>NULL</literal> if the role does not exist. The function requires
-         sufficient privileges to view role information; typically this means the calling
-         user must be a superuser or have the <literal>pg_read_all_settings</literal> role.
+         Returns <literal>NULL</literal> if the role does not exist.
         </para>
        </entry>
       </row>
@@ -2224,15 +2222,13 @@ SELECT currval(pg_get_serial_sequence('sometable', 'id'));
          programmatic processing or when you want to filter or analyze individual statements.
         </para>
         <para>
-         Returns an empty set if the role does not exist. The function requires
-         sufficient privileges to view role information; typically this means the calling
-         user must be a superuser or have the <literal>pg_read_all_settings</literal> role.
+         Returns an empty set if the role does not exist.
         </para>
        </entry>
       </row>
      </tbody>
     </tgroup>
-	</table>
+</table>
   <para>
    Most of the functions that reconstruct (decompile) database objects
    have an optional <parameter>pretty</parameter> flag, which
