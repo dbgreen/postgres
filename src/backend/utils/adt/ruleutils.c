@@ -651,7 +651,6 @@ pg_get_role_ddl_internal(Oid roleid, bool pretty)
 	{
 		struct pg_tm tm;
 		fsec_t		fsec;
-		int			tz;
 		char		ts_str[MAXDATELEN + 1];
 
 		if (timestamp2tm(rolevaliduntil, NULL, &tm, &fsec, NULL, NULL) == 0)
@@ -891,7 +890,6 @@ pg_get_role_ddl_statements(PG_FUNCTION_ARGS)
 	{
 		MemoryContext oldcontext;
 		Oid			roleid = PG_GETARG_OID(0);
-		bool		pretty = true;
 
 		funcctx = SRF_FIRSTCALL_INIT();
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
