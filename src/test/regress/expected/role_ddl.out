@@ -60,7 +60,7 @@ CREATE ROLE regress_role_ddl_test3
   CONNECTION LIMIT 5 
   VALID UNTIL '2030-12-31 23:59:59+00';
 SELECT pg_get_role_ddl('regress_role_ddl_test3');
-                pg_get_role_ddl                
+           pg_get_role_ddl                
 --------------------------------------
  CREATE ROLE regress_role_ddl_test3  +
    LOGIN                             +
