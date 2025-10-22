@@ -1,51 +1,53 @@
+SET
 CREATE DATABASE
+You are now connected to database "role_ddl_test" as user "shadowram".
 CREATE ROLE
-  pg_get_role_ddl  
--------------------
- CREATE ROLE test1+
-   NOLOGIN        +
-   NOSUPERUSER    +
-   NOCREATEDB     +
-   NOCREATEROLE   +
-   INHERIT        +
-   NOREPLICATION  +
+          pg_get_role_ddl           
+------------------------------------
+ CREATE ROLE regress_role_ddl_test1+
+   NOLOGIN                         +
+   NOSUPERUSER                     +
+   NOCREATEDB                      +
+   NOCREATEROLE                    +
+   INHERIT                         +
+   NOREPLICATION                   +
    NOBYPASSRLS;
 (1 row)
 
-  pg_get_role_ddl  
--------------------
- CREATE ROLE test1+
-   NOLOGIN        +
-   NOSUPERUSER    +
-   NOCREATEDB     +
-   NOCREATEROLE   +
-   INHERIT        +
-   NOREPLICATION  +
+          pg_get_role_ddl           
+------------------------------------
+ CREATE ROLE regress_role_ddl_test1+
+   NOLOGIN                         +
+   NOSUPERUSER                     +
+   NOCREATEDB                      +
+   NOCREATEROLE                    +
+   INHERIT                         +
+   NOREPLICATION                   +
    NOBYPASSRLS;
 (1 row)
 
-                                         pg_get_role_ddl                                          
---------------------------------------------------------------------------------------------------
- CREATE ROLE test1 NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+                                                  pg_get_role_ddl                                                  
+-------------------------------------------------------------------------------------------------------------------
+ CREATE ROLE regress_role_ddl_test1 NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
 (1 row)
 
 CREATE ROLE
-  pg_get_role_ddl  
--------------------
- CREATE ROLE test2+
-   LOGIN          +
-   NOSUPERUSER    +
-   NOCREATEDB     +
-   NOCREATEROLE   +
-   INHERIT        +
-   NOREPLICATION  +
+          pg_get_role_ddl           
+------------------------------------
+ CREATE ROLE regress_role_ddl_test2+
+   LOGIN                           +
+   NOSUPERUSER                     +
+   NOCREATEDB                      +
+   NOCREATEROLE                    +
+   INHERIT                         +
+   NOREPLICATION                   +
    NOBYPASSRLS;
 (1 row)
 
 CREATE ROLE
              pg_get_role_ddl             
 -----------------------------------------
- CREATE ROLE test3                      +
+ CREATE ROLE regress_role_ddl_test3     +
    LOGIN                                +
    SUPERUSER                            +
    CREATEDB                             +
@@ -60,80 +62,80 @@ CREATE ROLE
 CREATE ROLE
 ALTER ROLE
 ALTER ROLE
-                      pg_get_role_ddl                      
------------------------------------------------------------
- CREATE ROLE test4                                        +
-   NOLOGIN                                                +
-   NOSUPERUSER                                            +
-   NOCREATEDB                                             +
-   NOCREATEROLE                                           +
-   INHERIT                                                +
-   NOREPLICATION                                          +
-   NOBYPASSRLS;                                           +
- ALTER ROLE test4 SET work_mem TO '256MB';                +
- ALTER ROLE test4 SET search_path TO '"myschema, public"';
+                              pg_get_role_ddl                               
+----------------------------------------------------------------------------
+ CREATE ROLE regress_role_ddl_test4                                        +
+   NOLOGIN                                                                 +
+   NOSUPERUSER                                                             +
+   NOCREATEDB                                                              +
+   NOCREATEROLE                                                            +
+   INHERIT                                                                 +
+   NOREPLICATION                                                           +
+   NOBYPASSRLS;                                                            +
+ ALTER ROLE regress_role_ddl_test4 SET work_mem TO '256MB';                +
+ ALTER ROLE regress_role_ddl_test4 SET search_path TO '"myschema, public"';
 (1 row)
 
 CREATE ROLE
 ALTER ROLE
-                           pg_get_role_ddl                           
----------------------------------------------------------------------
- CREATE ROLE test5                                                  +
-   NOLOGIN                                                          +
-   NOSUPERUSER                                                      +
-   NOCREATEDB                                                       +
-   NOCREATEROLE                                                     +
-   INHERIT                                                          +
-   NOREPLICATION                                                    +
-   NOBYPASSRLS;                                                     +
- ALTER ROLE test5 IN DATABASE role_ddl_test SET work_mem TO '128MB';
+                                   pg_get_role_ddl                                    
+--------------------------------------------------------------------------------------
+ CREATE ROLE regress_role_ddl_test5                                                  +
+   NOLOGIN                                                                           +
+   NOSUPERUSER                                                                       +
+   NOCREATEDB                                                                        +
+   NOCREATEROLE                                                                      +
+   INHERIT                                                                           +
+   NOREPLICATION                                                                     +
+   NOBYPASSRLS;                                                                      +
+ ALTER ROLE regress_role_ddl_test5 IN DATABASE role_ddl_test SET work_mem TO '128MB';
 (1 row)
 
-                pg_get_role_ddl_statements                 
------------------------------------------------------------
- CREATE ROLE test4                                        +
-   NOLOGIN                                                +
-   NOSUPERUSER                                            +
-   NOCREATEDB                                             +
-   NOCREATEROLE                                           +
-   INHERIT                                                +
-   NOREPLICATION                                          +
+                         pg_get_role_ddl_statements                         
+----------------------------------------------------------------------------
+ CREATE ROLE regress_role_ddl_test4                                        +
+   NOLOGIN                                                                 +
+   NOSUPERUSER                                                             +
+   NOCREATEDB                                                              +
+   NOCREATEROLE                                                            +
+   INHERIT                                                                 +
+   NOREPLICATION                                                           +
    NOBYPASSRLS;
- ALTER ROLE test4 SET work_mem TO '256MB';
- ALTER ROLE test4 SET search_path TO '"myschema, public"';
+ ALTER ROLE regress_role_ddl_test4 SET work_mem TO '256MB';
+ ALTER ROLE regress_role_ddl_test4 SET search_path TO '"myschema, public"';
 (3 rows)
 
-                pg_get_role_ddl_statements                 
------------------------------------------------------------
- CREATE ROLE test4                                        +
-   NOLOGIN                                                +
-   NOSUPERUSER                                            +
-   NOCREATEDB                                             +
-   NOCREATEROLE                                           +
-   INHERIT                                                +
-   NOREPLICATION                                          +
+                         pg_get_role_ddl_statements                         
+----------------------------------------------------------------------------
+ CREATE ROLE regress_role_ddl_test4                                        +
+   NOLOGIN                                                                 +
+   NOSUPERUSER                                                             +
+   NOCREATEDB                                                              +
+   NOCREATEROLE                                                            +
+   INHERIT                                                                 +
+   NOREPLICATION                                                           +
    NOBYPASSRLS;
- ALTER ROLE test4 SET work_mem TO '256MB';
- ALTER ROLE test4 SET search_path TO '"myschema, public"';
+ ALTER ROLE regress_role_ddl_test4 SET work_mem TO '256MB';
+ ALTER ROLE regress_role_ddl_test4 SET search_path TO '"myschema, public"';
 (3 rows)
 
-                                    pg_get_role_ddl_statements                                    
---------------------------------------------------------------------------------------------------
- CREATE ROLE test4 NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
- ALTER ROLE test4 SET work_mem TO '256MB';
- ALTER ROLE test4 SET search_path TO '"myschema, public"';
+                                            pg_get_role_ddl_statements                                             
+-------------------------------------------------------------------------------------------------------------------
+ CREATE ROLE regress_role_ddl_test4 NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
+ ALTER ROLE regress_role_ddl_test4 SET work_mem TO '256MB';
+ ALTER ROLE regress_role_ddl_test4 SET search_path TO '"myschema, public"';
 (3 rows)
 
 CREATE ROLE
-       pg_get_role_ddl        
-------------------------------
- CREATE ROLE "role-with-dash"+
-   NOLOGIN                   +
-   NOSUPERUSER               +
-   NOCREATEDB                +
-   NOCREATEROLE              +
-   INHERIT                   +
-   NOREPLICATION             +
+           pg_get_role_ddl            
+--------------------------------------
+ CREATE ROLE "regress_role-with-dash"+
+   NOLOGIN                           +
+   NOSUPERUSER                       +
+   NOCREATEDB                        +
+   NOCREATEROLE                      +
+   INHERIT                           +
+   NOREPLICATION                     +
    NOBYPASSRLS;
 (1 row)
 
@@ -148,4 +150,6 @@ DROP ROLE
 DROP ROLE
 DROP ROLE
 DROP ROLE
+You are now connected to database "postgres" as user "shadowram".
 DROP DATABASE
+RESET
