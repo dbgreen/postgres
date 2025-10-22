@@ -2,10 +2,7 @@
 SET timezone = 'UTC';
 
 -- Create test database
-CREATE DATABASE role_ddl_test;
-
--- Connect to test database for database-specific settings
-\c role_ddl_test
+CREATE DATABASE regression_role_ddl_test;
 
 -- Test 1: Basic role with defaults
 CREATE ROLE regress_role_ddl_test1;
@@ -35,7 +32,7 @@ SELECT pg_get_role_ddl('regress_role_ddl_test4');
 
 -- Test 5: Role with database-specific configuration
 CREATE ROLE regress_role_ddl_test5;
-ALTER ROLE regress_role_ddl_test5 IN DATABASE role_ddl_test SET work_mem TO '128MB';
+ALTER ROLE regress_role_ddl_test5 IN DATABASE regression_role_ddl_test SET work_mem TO '128MB';
 SELECT pg_get_role_ddl('regress_role_ddl_test5');
 
 -- Test 6: Test pg_get_role_ddl_statements function
@@ -58,10 +55,7 @@ DROP ROLE regress_role_ddl_test4;
 DROP ROLE regress_role_ddl_test5;
 DROP ROLE "regress_role-with-dash";
 
--- Switch back to default database before dropping test database
-\c postgres
-
-DROP DATABASE role_ddl_test;
+DROP DATABASE regression_role_ddl_test;
 
 -- Reset timezone to default
 RESET timezone;

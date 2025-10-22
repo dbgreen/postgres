@@ -1,7 +1,10 @@
-SET
-CREATE DATABASE
-You are now connected to database "role_ddl_test" as user "shadowram".
-CREATE ROLE
+-- Set fixed timezone for consistent test results
+SET timezone = 'UTC';
+-- Create test database
+CREATE DATABASE regression_role_ddl_test;
+-- Test 1: Basic role with defaults
+CREATE ROLE regress_role_ddl_test1;
+SELECT pg_get_role_ddl('regress_role_ddl_test1');
           pg_get_role_ddl           
 ------------------------------------
  CREATE ROLE regress_role_ddl_test1+
@@ -14,6 +17,7 @@ CREATE ROLE
    NOBYPASSRLS;
 (1 row)
 
+SELECT pg_get_role_ddl('regress_role_ddl_test1', true);
           pg_get_role_ddl           
 ------------------------------------
  CREATE ROLE regress_role_ddl_test1+
@@ -26,12 +30,15 @@ CREATE ROLE
    NOBYPASSRLS;
 (1 row)
 
+SELECT pg_get_role_ddl('regress_role_ddl_test1', false);
                                                   pg_get_role_ddl                                                  
 -------------------------------------------------------------------------------------------------------------------
  CREATE ROLE regress_role_ddl_test1 NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
 (1 row)
 
-CREATE ROLE
+-- Test 2: Role with LOGIN
+CREATE ROLE regress_role_ddl_test2 LOGIN;
+SELECT pg_get_role_ddl('regress_role_ddl_test2');
           pg_get_role_ddl           
 ------------------------------------
  CREATE ROLE regress_role_ddl_test2+
@@ -44,24 +51,34 @@ CREATE ROLE
    NOBYPASSRLS;
 (1 row)
 
-CREATE ROLE
-             pg_get_role_ddl             
------------------------------------------
- CREATE ROLE regress_role_ddl_test3     +
-   LOGIN                                +
-   SUPERUSER                            +
-   CREATEDB                             +
-   CREATEROLE                           +
-   INHERIT                              +
-   NOREPLICATION                        +
-   NOBYPASSRLS                          +
-   CONNECTION LIMIT 5                   +
-   VALID UNTIL '2030-12-31 17:59:59-06';
+-- Test 3: Role with multiple privileges
+CREATE ROLE regress_role_ddl_test3 
+  LOGIN 
+  SUPERUSER 
+  CREATEDB 
+  CREATEROLE 
+  CONNECTION LIMIT 5 
+  VALID UNTIL '2030-12-31 23:59:59+00';
+SELECT pg_get_role_ddl('regress_role_ddl_test3');
+                pg_get_role_ddl                
+-----------------------------------------------
+ CREATE ROLE regress_role_ddl_test3           +
+   LOGIN                                      +
+   SUPERUSER                                  +
+   CREATEDB                                   +
+   CREATEROLE                                 +
+   INHERIT                                    +
+   NOREPLICATION                              +
+   NOBYPASSRLS                                +
+   CONNECTION LIMIT 5                         +
+   VALID UNTIL 'Tue Dec 31 23:59:59 2030 +00';
 (1 row)
 
-CREATE ROLE
-ALTER ROLE
-ALTER ROLE
+-- Test 4: Role with configuration parameters
+CREATE ROLE regress_role_ddl_test4;
+ALTER ROLE regress_role_ddl_test4 SET work_mem TO '256MB';
+ALTER ROLE regress_role_ddl_test4 SET search_path TO 'myschema, public';
+SELECT pg_get_role_ddl('regress_role_ddl_test4');
                               pg_get_role_ddl                               
 ----------------------------------------------------------------------------
  CREATE ROLE regress_role_ddl_test4                                        +
@@ -76,21 +93,25 @@ ALTER ROLE
  ALTER ROLE regress_role_ddl_test4 SET search_path TO '"myschema, public"';
 (1 row)
 
-CREATE ROLE
-ALTER ROLE
-                                   pg_get_role_ddl                                    
---------------------------------------------------------------------------------------
- CREATE ROLE regress_role_ddl_test5                                                  +
-   NOLOGIN                                                                           +
-   NOSUPERUSER                                                                       +
-   NOCREATEDB                                                                        +
-   NOCREATEROLE                                                                      +
-   INHERIT                                                                           +
-   NOREPLICATION                                                                     +
-   NOBYPASSRLS;                                                                      +
- ALTER ROLE regress_role_ddl_test5 IN DATABASE role_ddl_test SET work_mem TO '128MB';
+-- Test 5: Role with database-specific configuration
+CREATE ROLE regress_role_ddl_test5;
+ALTER ROLE regress_role_ddl_test5 IN DATABASE regression_role_ddl_test SET work_mem TO '128MB';
+SELECT pg_get_role_ddl('regress_role_ddl_test5');
+                                         pg_get_role_ddl                                         
+-------------------------------------------------------------------------------------------------
+ CREATE ROLE regress_role_ddl_test5                                                             +
+   NOLOGIN                                                                                      +
+   NOSUPERUSER                                                                                  +
+   NOCREATEDB                                                                                   +
+   NOCREATEROLE                                                                                 +
+   INHERIT                                                                                      +
+   NOREPLICATION                                                                                +
+   NOBYPASSRLS;                                                                                 +
+ ALTER ROLE regress_role_ddl_test5 IN DATABASE regression_role_ddl_test SET work_mem TO '128MB';
 (1 row)
 
+-- Test 6: Test pg_get_role_ddl_statements function
+SELECT * FROM pg_get_role_ddl_statements('regress_role_ddl_test4');
                          pg_get_role_ddl_statements                         
 ----------------------------------------------------------------------------
  CREATE ROLE regress_role_ddl_test4                                        +
@@ -105,6 +126,7 @@ ALTER ROLE
  ALTER ROLE regress_role_ddl_test4 SET search_path TO '"myschema, public"';
 (3 rows)
 
+SELECT * FROM pg_get_role_ddl_statements('regress_role_ddl_test4', true);
                          pg_get_role_ddl_statements                         
 ----------------------------------------------------------------------------
  CREATE ROLE regress_role_ddl_test4                                        +
@@ -119,6 +141,7 @@ ALTER ROLE
  ALTER ROLE regress_role_ddl_test4 SET search_path TO '"myschema, public"';
 (3 rows)
 
+SELECT * FROM pg_get_role_ddl_statements('regress_role_ddl_test4', false);
                                             pg_get_role_ddl_statements                                             
 -------------------------------------------------------------------------------------------------------------------
  CREATE ROLE regress_role_ddl_test4 NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE INHERIT NOREPLICATION NOBYPASSRLS;
@@ -126,7 +149,9 @@ ALTER ROLE
  ALTER ROLE regress_role_ddl_test4 SET search_path TO '"myschema, public"';
 (3 rows)
 
-CREATE ROLE
+-- Test 7: Role with special characters (requires quoting)
+CREATE ROLE "regress_role-with-dash";
+SELECT pg_get_role_ddl('regress_role-with-dash');
            pg_get_role_ddl            
 --------------------------------------
  CREATE ROLE "regress_role-with-dash"+
@@ -139,17 +164,20 @@ CREATE ROLE
    NOBYPASSRLS;
 (1 row)
 
+-- Test 8: Non-existent role (should return NULL)
+SELECT pg_get_role_ddl(9999999::oid);
  pg_get_role_ddl 
 -----------------
  
 (1 row)
 
-DROP ROLE
-DROP ROLE
-DROP ROLE
-DROP ROLE
-DROP ROLE
-DROP ROLE
-You are now connected to database "postgres" as user "shadowram".
-DROP DATABASE
-RESET
+-- Cleanup
+DROP ROLE regress_role_ddl_test1;
+DROP ROLE regress_role_ddl_test2;
+DROP ROLE regress_role_ddl_test3;
+DROP ROLE regress_role_ddl_test4;
+DROP ROLE regress_role_ddl_test5;
+DROP ROLE "regress_role-with-dash";
+DROP DATABASE regression_role_ddl_test;
+-- Reset timezone to default
+RESET timezone;

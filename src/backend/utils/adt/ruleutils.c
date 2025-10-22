@@ -654,11 +654,11 @@ pg_get_role_ddl_internal(Oid roleid, bool pretty)
 		int			tz;
 		char		ts_str[MAXDATELEN + 1];
 
-		if (timestamp2tm(rolevaliduntil, &tz, &tm, &fsec, NULL, NULL) == 0)
+		if (timestamp2tm(rolevaliduntil, NULL, &tm, &fsec, NULL, NULL) == 0)
 		{
-			EncodeDateTime(&tm, fsec, true, tz, NULL, DateStyle, ts_str);
+			EncodeDateTime(&tm, fsec, false, 0, "UTC", USE_ISO_DATES, ts_str);
 			appendStringInfo(&buf, "%sVALID UNTIL %s",
-							 separator, quote_literal_cstr(ts_str));
+							separator, quote_literal_cstr(ts_str));
 		}
 	}
 
