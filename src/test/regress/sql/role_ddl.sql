@@ -1,3 +1,6 @@
+-- Set fixed timezone for consistent test results
+SET timezone = 'UTC'
+
 -- Create test database
 CREATE DATABASE role_ddl_test;
 
@@ -51,3 +54,6 @@ DROP ROLE test4;
 DROP ROLE test5;
 DROP ROLE "role-with-dash";
 DROP DATABASE role_ddl_test;
+
+-- Reset timezone to default
+RESET timezone;

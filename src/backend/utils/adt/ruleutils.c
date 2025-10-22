@@ -811,15 +811,42 @@ Datum
 pg_get_role_ddl(PG_FUNCTION_ARGS)
 {
 	Oid			roleid = PG_GETARG_OID(0);
-	bool		pretty = true;
 	List	   *statements;
 	StringInfoData result;
 	ListCell   *lc;
 	bool		first = true;
 
-	/* Check if pretty-print parameter was provided */
-	if (PG_NARGS() > 1)
-		pretty = PG_GETARG_BOOL(1);
+	statements = pg_get_role_ddl_internal(roleid, true);
+
+	if (statements == NIL)
+		PG_RETURN_NULL();
+
+	initStringInfo(&result);
+
+	foreach(lc, statements)
+	{
+		char	   *stmt = (char *) lfirst(lc);
+
+		if (!first)
+			appendStringInfoChar(&result, '\n');
+		appendStringInfoString(&result, stmt);
+		first = false;
+	}
+
+	list_free_deep(statements);
+
+	PG_RETURN_TEXT_P(cstring_to_text(result.data));
+}
+
+Datum
+pg_get_role_ddl_ext(PG_FUNCTION_ARGS)
+{
+	Oid			roleid = PG_GETARG_OID(0);
+	bool		pretty = PG_GETARG_BOOL(1);
+	List	   *statements;
+	StringInfoData result;
+	ListCell   *lc;
+	bool		first = true;
 
 	statements = pg_get_role_ddl_internal(roleid, pretty);
 
@@ -866,9 +893,47 @@ pg_get_role_ddl_statements(PG_FUNCTION_ARGS)
 		Oid			roleid = PG_GETARG_OID(0);
 		bool		pretty = true;
 
-		/* Check if pretty-print parameter was provided */
-		if (PG_NARGS() > 1)
-			pretty = PG_GETARG_BOOL(1);
+		funcctx = SRF_FIRSTCALL_INIT();
+		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
+
+		statements = pg_get_role_ddl_internal(roleid, true);
+		funcctx->user_fctx = statements;
+		funcctx->max_calls = list_length(statements);
+
+		MemoryContextSwitchTo(oldcontext);
+	}
+
+	funcctx = SRF_PERCALL_SETUP();
+	statements = (List *) funcctx->user_fctx;
+
+	if (funcctx->call_cntr < funcctx->max_calls)
+	{
+		char	   *stmt;
+
+		lc = list_nth_cell(statements, funcctx->call_cntr);
+		stmt = (char *) lfirst(lc);
+
+		SRF_RETURN_NEXT(funcctx, CStringGetTextDatum(stmt));
+	}
+	else
+	{
+		list_free_deep(statements);
+		SRF_RETURN_DONE(funcctx);
+	}
+}
+
+Datum
+pg_get_role_ddl_statements_ext(PG_FUNCTION_ARGS)
+{
+	FuncCallContext *funcctx;
+	List	   *statements;
+	ListCell   *lc;
+
+	if (SRF_IS_FIRSTCALL())
+	{
+		MemoryContext oldcontext;
+		Oid			roleid = PG_GETARG_OID(0);
+		bool		pretty = PG_GETARG_BOOL(1);
 
 		funcctx = SRF_FIRSTCALL_INIT();
 		oldcontext = MemoryContextSwitchTo(funcctx->multi_call_memory_ctx);
