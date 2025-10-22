@@ -12607,4 +12607,29 @@
   proargnames => '{pid,io_id,io_generation,state,operation,off,length,target,handle_data_len,raw_result,result,target_desc,f_sync,f_localmem,f_buffered}',
   prosrc => 'pg_get_aios' },
 
+# pg_get_role_ddl - return DDL to recreate a role (compact format)
+{ oid => '9991', descr => 'get SQL commands to recreate role',
+  proname => 'pg_get_role_ddl', pronamespace => 'pg_catalog',
+  proowner => 'POSTGRES', prolang => 'internal', procost => '1', prorows => '0',
+  provariadic => '0', prosupport => '0', prokind => 'f', prosecdef => 'f',
+  proleakproof => 'f', proisstrict => 't', proretset => 'f', provolatile => 's',
+  proparallel => 's', pronargs => '1', pronargdefaults => '0',
+  prorettype => 'text', proargtypes => 'regrole', proallargtypes => '_null_',
+  proargmodes => '_null_', proargnames => '_null_', proargdefaults => '_null_',
+  protrftypes => '_null_', prosrc => 'pg_get_role_ddl', probin => '_null_',
+  prosqlbody => '_null_', proconfig => '_null_', proacl => '_null_' },
+
+# pg_get_role_ddl_statements - return DDL as separate statements (compact format)
+{ oid => '9992', descr => 'get SQL commands to recreate role as row set',
+  proname => 'pg_get_role_ddl_statements', pronamespace => 'pg_catalog',
+  proowner => 'POSTGRES', prolang => 'internal', procost => '1',
+  prorows => '10', provariadic => '0', prosupport => '0', prokind => 'f',
+  prosecdef => 'f', proleakproof => 'f', proisstrict => 't', proretset => 't',
+  provolatile => 's', proparallel => 's', pronargs => '1',
+  pronargdefaults => '0', prorettype => 'text', proargtypes => 'regrole',
+  proallargtypes => '_null_', proargmodes => '_null_', proargnames => '_null_',
+  proargdefaults => '_null_', protrftypes => '_null_',
+  prosrc => 'pg_get_role_ddl_statements', probin => '_null_',
+  prosqlbody => '_null_', proconfig => '_null_', proacl => '_null_' },
+
 ]
