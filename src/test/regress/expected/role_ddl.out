@@ -71,7 +71,7 @@ SELECT pg_get_role_ddl('regress_role_ddl_test3');
    NOREPLICATION                              +
    NOBYPASSRLS                                +
    CONNECTION LIMIT 5                         +
-   VALID UNTIL 'Tue Dec 31 23:59:59 2030 +00';
+   VALID UNTIL '2030-12-31 23:59:59';
 (1 row)
 
 -- Test 4: Role with configuration parameters
