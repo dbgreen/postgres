@@ -46,6 +46,7 @@ typedef struct config_var_value
 {
 	union config_var_val val;
 	void	   *extra;
+	void	   *extra_userdata;
 } config_var_value;
 
 /*

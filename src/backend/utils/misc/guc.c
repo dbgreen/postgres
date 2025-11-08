@@ -757,6 +757,27 @@ extra_field_used(struct config_generic *gconf, void *extra)
 }
 
 /*
+ * Free an extra field value, respecting GUC_EXTRA_IS_CONTEXT flag.
+ *
+ * If the GUC variable has GUC_EXTRA_IS_CONTEXT set, the extra field
+ * is treated as a MemoryContext and deleted via MemoryContextDelete().
+ * Otherwise, it's freed via guc_free().
+ *
+ * This is a convenience wrapper to avoid code duplication in the many
+ * places that need to free extra data.
+ */
+static void
+free_extra_value(struct config_generic *gconf, void *extra)
+{
+	if (extra == NULL)
+		return;
+
+	if (gconf->flags & GUC_EXTRA_IS_CONTEXT)
+		MemoryContextDelete((MemoryContext) extra);
+	else
+		guc_free(extra);
+}
+/*
  * Support for assigning to an "extra" field of a GUC item.  Free the prior
  * value if it's not referenced anywhere else in the item (including stacked
  * states).
@@ -771,7 +792,7 @@ set_extra_field(struct config_generic *gconf, void **field, void *newval)
 
 	/* Free old value if it's not NULL and isn't referenced anymore */
 	if (oldval && !extra_field_used(gconf, oldval))
-		guc_free(oldval);
+		free_extra_value(gconf, oldval);
 }
 
 /*
@@ -803,6 +824,12 @@ set_stack_value(struct config_generic *gconf, config_var_value *val)
 			break;
 	}
 	set_extra_field(gconf, &(val->extra), gconf->extra);
+
+	/* Save userData if extra is a MemoryContext */
+	if (gconf->extra && (gconf->flags & GUC_EXTRA_IS_CONTEXT))
+		val->extra_userdata = MemoryContextGetUserData((MemoryContext) gconf->extra);
+	else
+		val->extra_userdata = NULL;
 }
 
 /*
@@ -827,6 +854,7 @@ discard_stack_value(struct config_generic *gconf, config_var_value *val)
 			break;
 	}
 	set_extra_field(gconf, &(val->extra), NULL);
+	val->extra_userdata = NULL;
 }
 
 
@@ -2285,6 +2313,9 @@ AtEOXact_GUC(bool isCommit, int nestLevel)
 							if (*conf->variable != newval ||
 								gconf->extra != newextra)
 							{
+								if (newextra && (gconf->flags & GUC_EXTRA_IS_CONTEXT))
+									MemoryContextSetUserData((MemoryContext) newextra, newvalue.extra_userdata);
+
 								if (conf->assign_hook)
 									conf->assign_hook(newval, newextra);
 								*conf->variable = newval;
@@ -2303,6 +2334,9 @@ AtEOXact_GUC(bool isCommit, int nestLevel)
 							if (*conf->variable != newval ||
 								gconf->extra != newextra)
 							{
+								if (newextra && (gconf->flags & GUC_EXTRA_IS_CONTEXT))
+									MemoryContextSetUserData((MemoryContext) newextra, newvalue.extra_userdata);
+
 								if (conf->assign_hook)
 									conf->assign_hook(newval, newextra);
 								*conf->variable = newval;
@@ -2321,6 +2355,9 @@ AtEOXact_GUC(bool isCommit, int nestLevel)
 							if (*conf->variable != newval ||
 								gconf->extra != newextra)
 							{
+								if (newextra && (gconf->flags & GUC_EXTRA_IS_CONTEXT))
+									MemoryContextSetUserData((MemoryContext) newextra, newvalue.extra_userdata);
+
 								if (conf->assign_hook)
 									conf->assign_hook(newval, newextra);
 								*conf->variable = newval;
@@ -2339,6 +2376,9 @@ AtEOXact_GUC(bool isCommit, int nestLevel)
 							if (*conf->variable != newval ||
 								gconf->extra != newextra)
 							{
+								if (newextra && (gconf->flags & GUC_EXTRA_IS_CONTEXT))
+									MemoryContextSetUserData((MemoryContext) newextra, newvalue.extra_userdata);
+
 								if (conf->assign_hook)
 									conf->assign_hook(newval, newextra);
 								set_string_field(gconf, conf->variable, newval);
@@ -2366,6 +2406,9 @@ AtEOXact_GUC(bool isCommit, int nestLevel)
 							if (*conf->variable != newval ||
 								gconf->extra != newextra)
 							{
+								if (newextra && (gconf->flags & GUC_EXTRA_IS_CONTEXT))
+									MemoryContextSetUserData((MemoryContext) newextra, newvalue.extra_userdata);
+
 								if (conf->assign_hook)
 									conf->assign_hook(newval, newextra);
 								*conf->variable = newval;
@@ -3598,7 +3641,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 				{
 					/* Release newextra, unless it's reset_extra */
 					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
+						free_extra_value(record, newextra);
 
 					if (*conf->variable != newval)
 					{
@@ -3630,11 +3673,14 @@ set_config_with_handle(const char *name, config_handle *handle,
 				}
 				if (makeDefault)
 				{
+					void *userdata = NULL;
+					if (newextra && (record->flags & GUC_EXTRA_IS_CONTEXT))
+						userdata = MemoryContextGetUserData((MemoryContext) newextra);
+
 					if (record->reset_source <= source)
 					{
 						conf->reset_val = newval;
-						set_extra_field(record, &record->reset_extra,
-										newextra);
+						set_extra_field(record, &record->reset_extra, newextra);
 						record->reset_source = source;
 						record->reset_scontext = context;
 						record->reset_srole = srole;
@@ -3644,8 +3690,8 @@ set_config_with_handle(const char *name, config_handle *handle,
 						if (stack->source <= source)
 						{
 							stack->prior.val.boolval = newval;
-							set_extra_field(record, &stack->prior.extra,
-											newextra);
+							set_extra_field(record, &stack->prior.extra, newextra);
+							stack->prior.extra_userdata = userdata;
 							stack->source = source;
 							stack->scontext = context;
 							stack->srole = srole;
@@ -3655,7 +3701,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 
 				/* Perhaps we didn't install newextra anywhere */
 				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
+					free_extra_value(record,newextra);
 				break;
 
 #undef newval
@@ -3694,7 +3740,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 				{
 					/* Release newextra, unless it's reset_extra */
 					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
+						free_extra_value(record, newextra);
 
 					if (*conf->variable != newval)
 					{
@@ -3726,6 +3772,9 @@ set_config_with_handle(const char *name, config_handle *handle,
 				}
 				if (makeDefault)
 				{
+					void *userdata = NULL;
+					if (newextra && (record->flags & GUC_EXTRA_IS_CONTEXT))
+						userdata = MemoryContextGetUserData((MemoryContext) newextra);
 					if (record->reset_source <= source)
 					{
 						conf->reset_val = newval;
@@ -3742,6 +3791,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 							stack->prior.val.intval = newval;
 							set_extra_field(record, &stack->prior.extra,
 											newextra);
+							stack->prior.extra_userdata = userdata;
 							stack->source = source;
 							stack->scontext = context;
 							stack->srole = srole;
@@ -3751,7 +3801,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 
 				/* Perhaps we didn't install newextra anywhere */
 				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
+					free_extra_value(record, newextra);
 				break;
 
 #undef newval
@@ -3790,7 +3840,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 				{
 					/* Release newextra, unless it's reset_extra */
 					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
+						free_extra_value(record, newextra);
 
 					if (*conf->variable != newval)
 					{
@@ -3822,6 +3872,10 @@ set_config_with_handle(const char *name, config_handle *handle,
 				}
 				if (makeDefault)
 				{
+					void *userdata = NULL;
+					if (newextra && (record->flags & GUC_EXTRA_IS_CONTEXT))
+						userdata = MemoryContextGetUserData((MemoryContext) newextra);
+
 					if (record->reset_source <= source)
 					{
 						conf->reset_val = newval;
@@ -3838,6 +3892,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 							stack->prior.val.realval = newval;
 							set_extra_field(record, &stack->prior.extra,
 											newextra);
+							stack->prior.extra_userdata = userdata;
 							stack->source = source;
 							stack->scontext = context;
 							stack->srole = srole;
@@ -3847,7 +3902,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 
 				/* Perhaps we didn't install newextra anywhere */
 				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
+					free_extra_value(record, newextra);
 				break;
 
 #undef newval
@@ -3884,7 +3939,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 					if (!call_string_check_hook(record, &newval, &newextra,
 												source, elevel))
 					{
-						guc_free(newval);
+						free_extra_value(record, newextra);
 						return 0;
 					}
 				}
@@ -3915,7 +3970,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 						guc_free(newval);
 					/* Release newextra, unless it's reset_extra */
 					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
+						free_extra_value(record, newextra);
 
 					if (newval_different)
 					{
@@ -3986,6 +4041,10 @@ set_config_with_handle(const char *name, config_handle *handle,
 
 				if (makeDefault)
 				{
+					void *userdata = NULL;
+					if (newextra && (record->flags & GUC_EXTRA_IS_CONTEXT))
+						userdata = MemoryContextGetUserData((MemoryContext) newextra);
+
 					if (record->reset_source <= source)
 					{
 						set_string_field(record, &conf->reset_val, newval);
@@ -4003,6 +4062,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 											 newval);
 							set_extra_field(record, &stack->prior.extra,
 											newextra);
+							stack->prior.extra_userdata = userdata;
 							stack->source = source;
 							stack->scontext = context;
 							stack->srole = srole;
@@ -4015,7 +4075,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 					guc_free(newval);
 				/* Perhaps we didn't install newextra anywhere */
 				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
+					free_extra_value(record, newextra);
 				break;
 
 #undef newval
@@ -4054,7 +4114,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 				{
 					/* Release newextra, unless it's reset_extra */
 					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
+						free_extra_value(record, newextra);
 
 					if (*conf->variable != newval)
 					{
@@ -4086,6 +4146,10 @@ set_config_with_handle(const char *name, config_handle *handle,
 				}
 				if (makeDefault)
 				{
+					void *userdata = NULL;
+					if (newextra && (record->flags & GUC_EXTRA_IS_CONTEXT))
+						userdata = MemoryContextGetUserData((MemoryContext) newextra);
+
 					if (record->reset_source <= source)
 					{
 						conf->reset_val = newval;
@@ -4102,6 +4166,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 							stack->prior.val.enumval = newval;
 							set_extra_field(record, &stack->prior.extra,
 											newextra);
+							stack->prior.extra_userdata = userdata;
 							stack->source = source;
 							stack->scontext = context;
 							stack->srole = srole;
@@ -4111,7 +4176,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 
 				/* Perhaps we didn't install newextra anywhere */
 				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
+					free_extra_value(record, newextra);
 				break;
 
 #undef newval
@@ -4563,7 +4628,7 @@ AlterSystemSetConfigFile(AlterSystemStmt *altersysstmt)
 
 				if (record->vartype == PGC_STRING && newval.stringval != NULL)
 					guc_free(newval.stringval);
-				guc_free(newextra);
+				free_extra_value(record, newextra);
 			}
 		}
 		else
@@ -6103,7 +6168,7 @@ RestoreGUCState(void *gucstate)
 		 * in.
 		 */
 		Assert(gconf->stack == NULL);
-		guc_free(gconf->extra);
+		free_extra_value(gconf, gconf->extra);
 		guc_free(gconf->last_reported);
 		guc_free(gconf->sourcefile);
 		switch (gconf->vartype)
@@ -6125,7 +6190,7 @@ RestoreGUCState(void *gucstate)
 				}
 		}
 		if (gconf->reset_extra && gconf->reset_extra != gconf->extra)
-			guc_free(gconf->reset_extra);
+			free_extra_value(gconf, gconf->reset_extra);
 		/* Remove it from any lists it's in. */
 		RemoveGUCFromLists(gconf);
 		/* Now we can reset the struct to PGS_S_DEFAULT state. */

@@ -432,7 +432,7 @@ MemoryContextResetOnly(MemoryContext context)
 		 * ident elsewhere, e.g. in a parent context.  So for now we assume
 		 * the programmer got it right.
 		 */
-
+		context->userData = NULL;
 		context->methods->reset(context);
 		context->isReset = true;
 	}
@@ -539,6 +539,7 @@ MemoryContextDeleteOnly(MemoryContext context)
 	 * (already unlinked) context, which is unlikely, but let's be safe.
 	 */
 	context->ident = NULL;
+	context->userData = NULL;
 
 	context->methods->delete_context(context);
 }
@@ -642,6 +643,38 @@ MemoryContextCallResetCallbacks(MemoryContext context)
 		context->reset_cbs = cb->next;
 		cb->func(cb->arg);
 	}
+}
+
+/*
+ * MemoryContextSetUserData
+ *		Store a user data pointer in the context
+ *
+ * This allows callers to associate arbitrary data with a context.
+ * Useful for features like GUC_EXTRA_IS_CONTEXT where complex
+ * structures need to be retrieved from a context pointer.
+ *
+ * The caller is responsible for managing the lifetime of the
+ * pointed-to data. The data should typically be allocated within
+ * the context itself to ensure proper cleanup.
+ */
+void
+MemoryContextSetUserData(MemoryContext context, void *userData)
+{
+	Assert(MemoryContextIsValid(context));
+	context->userData = userData;
+}
+
+/*
+ * MemoryContextGetUserData
+ *		Retrieve the user data pointer from the context
+ *
+ * Returns NULL if no user data has been set.
+ */
+void *
+MemoryContextGetUserData(MemoryContext context)
+{
+	Assert(MemoryContextIsValid(context));
+	return context->userData;
 }
 
 /*
@@ -1167,6 +1200,7 @@ MemoryContextCreate(MemoryContext node,
 	node->name = name;
 	node->ident = NULL;
 	node->reset_cbs = NULL;
+	node->userData = NULL;
 
 	/* OK to link node into context tree */
 	if (parent)

@@ -76,6 +76,8 @@ extern void MemoryContextDelete(MemoryContext context);
 extern void MemoryContextResetOnly(MemoryContext context);
 extern void MemoryContextResetChildren(MemoryContext context);
 extern void MemoryContextDeleteChildren(MemoryContext context);
+extern void MemoryContextSetUserData(MemoryContext context, void *userData);
+extern void *MemoryContextGetUserData(MemoryContext context);
 extern void MemoryContextSetIdentifier(MemoryContext context, const char *id);
 extern void MemoryContextSetParent(MemoryContext context,
 								   MemoryContext new_parent);

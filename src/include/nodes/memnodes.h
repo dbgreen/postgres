@@ -131,6 +131,7 @@ typedef struct MemoryContextData
 	const char *name;			/* context name */
 	const char *ident;			/* context ID if any */
 	MemoryContextCallback *reset_cbs;	/* list of reset/delete callbacks */
+	void		*userData;		/* optional user data */
 } MemoryContextData;
 
 /* utils/palloc.h contains typedef struct MemoryContextData *MemoryContext */
