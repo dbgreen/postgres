@@ -1,0 +1,5 @@
+# test_guc_extra_context extension
+comment = 'Test module for GUC_EXTRA_IS_CONTEXT feature'
+default_version = '1.0'
+module_pathname = '$libdir/test_guc_extra_context'
+relocatable = true
