@@ -243,6 +243,11 @@ typedef enum
 
 #define GUC_UNIT			 (GUC_UNIT_MEMORY | GUC_UNIT_TIME)
 
+typedef struct GucContextExtra
+{
+	MemoryContext context;		/* context to use */
+	void		*data;		/* extra data as needed */
+} GucContextExtra;
 
 /* GUC vars that are actually defined in guc_tables.c, rather than elsewhere */
 extern PGDLLIMPORT bool Debug_print_plan;

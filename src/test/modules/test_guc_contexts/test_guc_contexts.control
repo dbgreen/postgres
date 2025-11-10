@@ -1,0 +1,5 @@
+# test_guc_contexts extension
+comment = 'Test GUC_EXTRA_IS_CONTEXT with simple and complex structures'
+default_version = '1.0'
+module_pathname = '$libdir/test_guc_contexts'
+relocatable = true

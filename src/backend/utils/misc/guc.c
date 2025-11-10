@@ -763,7 +763,11 @@ free_extra_value(const struct config_generic *gconf, void *extra)
 		return;
 
 	if (gconf->flags & GUC_EXTRA_IS_CONTEXT)
-		MemoryContextDelete((MemoryContext) extra);
+	{
+		GucContextExtra *wrapper = (GucContextExtra *) extra;
+		MemoryContextDelete(wrapper->context);
+		guc_free(wrapper);
+	}
 	else
 		guc_free(extra);
 }
@@ -6115,7 +6119,7 @@ RestoreGUCState(void *gucstate)
 		 * in.
 		 */
 		Assert(gconf->stack == NULL);
-		guc_free(gconf->extra);
+		free_extra_value(gconf, gconf->extra);
 		guc_free(gconf->last_reported);
 		guc_free(gconf->sourcefile);
 		switch (gconf->vartype)
@@ -6137,7 +6141,7 @@ RestoreGUCState(void *gucstate)
 				}
 		}
 		if (gconf->reset_extra && gconf->reset_extra != gconf->extra)
-			guc_free(gconf->reset_extra);
+			free_extra_value(gconf, gconf->reset_extra);
 		/* Remove it from any lists it's in. */
 		RemoveGUCFromLists(gconf);
 		/* Now we can reset the struct to PGS_S_DEFAULT state. */
