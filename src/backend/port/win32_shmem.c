@@ -538,6 +538,36 @@ PGSharedMemoryDetach(void)
 	}
 }
 
+/*
+ * PGSharedMemoryMakeNonInheritable
+ *
+ * Make shared memory handle non-inheritable to prevent child processes
+ * spawned by backends from inheriting it. Called by backends before
+ * spawning external processes (e.g., via COPY TO PROGRAM).
+ */
+void
+PGSharedMemoryMakeNonInheritable(void)
+{
+	if (UsedShmemSegID != INVALID_HANDLE_VALUE)
+	{
+		elog(LOG, "attempting to make shared memory handle non-inheritable: handle=%p",
+			 UsedShmemSegID);
+		
+		if (!SetHandleInformation(UsedShmemSegID, HANDLE_FLAG_INHERIT, 0))
+		{
+			elog(WARNING, "could not disable shared memory handle inheritance: error code %lu",
+				 GetLastError());
+		}
+		else
+		{
+			elog(LOG, "successfully made shared memory handle non-inheritable");
+		}
+	}
+	else
+	{
+		elog(LOG, "UsedShmemSegID is INVALID_HANDLE_VALUE, nothing to do");
+	}
+}
 
 /*
  * pgwin32_SharedMemoryDelete

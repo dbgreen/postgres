@@ -69,6 +69,7 @@ extern PGDLLIMPORT unsigned long UsedShmemSegID;
 #else
 extern PGDLLIMPORT HANDLE UsedShmemSegID;
 extern PGDLLIMPORT void *ShmemProtectiveRegion;
+extern void PGSharedMemoryMakeNonInheritable(void);
 #endif
 extern PGDLLIMPORT void *UsedShmemSegAddr;
 

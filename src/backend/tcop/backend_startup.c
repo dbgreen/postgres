@@ -30,6 +30,7 @@
 #include "replication/walsender.h"
 #include "storage/fd.h"
 #include "storage/ipc.h"
+#include "storage/pg_shmem.h"
 #include "storage/procsignal.h"
 #include "storage/proc.h"
 #include "tcop/backend_startup.h"
@@ -114,6 +115,17 @@ BackendMain(const void *startup_data, size_t startup_data_len)
 	 * before we can use LWLocks or access any shared memory.
 	 */
 	InitProcess();
+
+#ifdef WIN32
+	/*
+	 * On Windows, make shared memory handle non-inheritable to prevent
+	 * child processes from inheriting it. Must be done after InitProcess()
+	 * attaches to shared memory.
+	 */
+	elog(LOG, "BackendMain: making shared memory handle non-inheritable (shmem=%p)",
+		 UsedShmemSegID);
+	PGSharedMemoryMakeNonInheritable();
+#endif
 
 	/*
 	 * Make sure we aren't in PostmasterContext anymore.  (We can't delete it
