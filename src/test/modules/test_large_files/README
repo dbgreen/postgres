@@ -1,0 +1,53 @@
+Test Module for Windows Large File I/O
+
+This test module provides functions to test PostgreSQL's ability to
+handle files larger than 4GB on Windows.
+
+Requirements
+
+- Windows platform
+- PostgreSQL built with segment size greater than 2GB
+- NTFS filesystem (for sparse file support)
+
+Functions
+
+test_create_sparse_file(filename text, size_gb int) RETURNS boolean
+
+Creates a sparse file of the specified size in gigabytes. This allows
+testing large offsets without actually writing gigabytes of data to
+disk.
+
+test_sparse_write_read(filename text, offset_gb float8, test_data text)
+RETURNS boolean
+
+Writes test data at the specified offset (in GB) using PostgreSQL's VFD
+layer (FileWrite), then reads it back using FileRead to verify basic I/O
+functionality.
+
+test_verify_offset_native(filename text, offset_gb float8, expected_data
+text) RETURNS boolean
+
+Critical for validation: Uses native Windows APIs (ReadFile with proper
+OVERLAPPED structure) to verify that data written by PostgreSQL is
+actually at the correct offset. This catches bugs where both write and
+read might use the same incorrect offset calculation (making a broken
+test appear to pass).
+
+Without this verification, a test could pass even with broken offset
+handling if both FileWrite and FileRead make the same mistake.
+
+What the Test Verifies
+
+1. Sparse file creation works on Windows
+2. PostgreSQL's FileWrite can write at offsets > 4GB
+3. PostgreSQL's FileRead can read from offsets > 4GB
+4. Data is actually at the correct offset (verified with native Windows
+   APIs)
+
+The native verification step is critical because without it, a test
+could pass even with broken offset handling. For example, if both
+FileWrite and FileRead truncate offsets to 32 bits, writing at 4.5GB
+would actually write at ~512MB, and reading at 4.5GB would read from
+~512MB - the test would find matching data but at the wrong location.
+The native verification catches this by independently checking the
+actual file offset.
