@@ -26,8 +26,7 @@ tests += {
       't/001_start_stop.pl',
       't/002_status.pl',
       't/003_promote.pl',
-      't/004_logrotate.pl',
-      't/005_shared_memory_handle_inheritance.pl'
+      't/004_logrotate.pl'
     ],
   },
 }

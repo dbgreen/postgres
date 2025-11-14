@@ -11,15 +11,12 @@
  *
  *-------------------------------------------------------------------------
  */
-
-#include "postgres_fe.h"
-
-#ifdef WIN32
-
-#include <windows.h>
 #include <stdio.h>
+#ifdef WIN32
+#include <windows.h>
 #include <stdlib.h>
-
+#include <string.h>
+#include <stdbool.h>
 /*
  * System information classes for NtQuerySystemInformation
  */
