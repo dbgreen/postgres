@@ -228,7 +228,7 @@ typedef enum
 							   0x002000 /* can't set in PG_AUTOCONF_FILENAME */
 #define GUC_RUNTIME_COMPUTED   0x004000 /* delay processing in 'postgres -C' */
 #define GUC_ALLOW_IN_PARALLEL  0x008000 /* allow setting in parallel mode */
-
+#define GUC_EXTRA_IS_CONTEXT   0x010000 /* 'extra' is GucContextExtra */
 #define GUC_UNIT_KB			 0x01000000 /* value is in kilobytes */
 #define GUC_UNIT_BLOCKS		 0x02000000 /* value is in blocks */
 #define GUC_UNIT_XBLOCKS	 0x03000000 /* value is in xlog blocks */
@@ -243,6 +243,19 @@ typedef enum
 
 #define GUC_UNIT			 (GUC_UNIT_MEMORY | GUC_UNIT_TIME)
 
+/*
+ * GUC_EXTRA_IS_CONTEXT indicates that the 'extra' field should be treated as
+ * a GucContextExtra wrapper containing a MemoryContext rather than plain
+ * allocated memory. This allows check hooks to allocate complex data structures
+ * (Lists, hash tables, etc.) using palloc within the context. The GUC machinery
+ * will call MemoryContextDelete() on the context and guc_free() on the wrapper
+ * when freeing the extra value.
+ */
+typedef struct GucContextExtra
+{
+	MemoryContext context;
+	void	   *data;
+}			GucContextExtra;
 
 /* GUC vars that are actually defined in guc_tables.c, rather than elsewhere */
 extern PGDLLIMPORT bool Debug_print_plan;
