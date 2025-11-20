@@ -771,7 +771,10 @@ set_extra_field(struct config_generic *gconf, void **field, void *newval)
 
 	/* Free old value if it's not NULL and isn't referenced anymore */
 	if (oldval && !extra_field_used(gconf, oldval))
-		guc_free(oldval);
+		if (gconf->flags & GUC_EXTRA_IS_CONTEXT)
+			MemoryContextDelete(GetMemoryChunkContext(oldval));
+		else
+			guc_free(oldval);
 }
 
 /*
@@ -3559,571 +3562,609 @@ set_config_with_handle(const char *name, config_handle *handle,
 		}
 		changeVal = false;
 	}
-
-	/*
-	 * Evaluate value and set variable.
+/*
+	 * Create memory context for GUC_EXTRA_IS_CONTEXT check hooks
 	 */
-	switch (record->vartype)
+	MemoryContext extra_cxt = NULL;
+	MemoryContext old_context = NULL;
+
+	if ((record->flags & GUC_EXTRA_IS_CONTEXT) && value != NULL)
 	{
-		case PGC_BOOL:
-			{
-				struct config_bool *conf = &record->_bool;
+		extra_cxt = AllocSetContextCreate(CurrentMemoryContext,
+										  "GUC extra data",
+										  ALLOCSET_DEFAULT_SIZES);
+		old_context = MemoryContextSwitchTo(extra_cxt);
+	}
+
+	PG_TRY();
+	{
+		/*
+		 * Evaluate value and set variable.
+		 */
+		switch (record->vartype)
+		{
+			case PGC_BOOL:
+				{
+					struct config_bool *conf = &record->_bool;
 
 #define newval (newval_union.boolval)
 
-				if (value)
-				{
-					if (!parse_and_validate_value(record, value,
-												  source, elevel,
-												  &newval_union, &newextra))
-						return 0;
-				}
-				else if (source == PGC_S_DEFAULT)
-				{
-					newval = conf->boot_val;
-					if (!call_bool_check_hook(record, &newval, &newextra,
-											  source, elevel))
-						return 0;
-				}
-				else
-				{
-					newval = conf->reset_val;
-					newextra = record->reset_extra;
-					source = record->reset_source;
-					context = record->reset_scontext;
-					srole = record->reset_srole;
-				}
-
-				if (prohibitValueChange)
-				{
-					/* Release newextra, unless it's reset_extra */
-					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
-
-					if (*conf->variable != newval)
+					if (value)
 					{
-						record->status |= GUC_PENDING_RESTART;
-						ereport(elevel,
-								(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-								 errmsg("parameter \"%s\" cannot be changed without restarting the server",
-										record->name)));
-						return 0;
+						if (!parse_and_validate_value(record, value,
+													  source, elevel,
+													  &newval_union, &newextra))
+							return 0;
 					}
-					record->status &= ~GUC_PENDING_RESTART;
-					return -1;
-				}
-
-				if (changeVal)
-				{
-					/* Save old value to support transaction abort */
-					if (!makeDefault)
-						push_old_value(record, action);
-
-					if (conf->assign_hook)
-						conf->assign_hook(newval, newextra);
-					*conf->variable = newval;
-					set_extra_field(record, &record->extra,
-									newextra);
-					set_guc_source(record, source);
-					record->scontext = context;
-					record->srole = srole;
-				}
-				if (makeDefault)
-				{
-					if (record->reset_source <= source)
+					else if (source == PGC_S_DEFAULT)
 					{
-						conf->reset_val = newval;
-						set_extra_field(record, &record->reset_extra,
-										newextra);
-						record->reset_source = source;
-						record->reset_scontext = context;
-						record->reset_srole = srole;
-					}
-					for (GucStack *stack = record->stack; stack; stack = stack->prev)
-					{
-						if (stack->source <= source)
-						{
-							stack->prior.val.boolval = newval;
-							set_extra_field(record, &stack->prior.extra,
-											newextra);
-							stack->source = source;
-							stack->scontext = context;
-							stack->srole = srole;
-						}
-					}
-				}
-
-				/* Perhaps we didn't install newextra anywhere */
-				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
-				break;
-
-#undef newval
-			}
-
-		case PGC_INT:
-			{
-				struct config_int *conf = &record->_int;
-
-#define newval (newval_union.intval)
-
-				if (value)
-				{
-					if (!parse_and_validate_value(record, value,
-												  source, elevel,
-												  &newval_union, &newextra))
-						return 0;
-				}
-				else if (source == PGC_S_DEFAULT)
-				{
-					newval = conf->boot_val;
-					if (!call_int_check_hook(record, &newval, &newextra,
-											 source, elevel))
-						return 0;
-				}
-				else
-				{
-					newval = conf->reset_val;
-					newextra = record->reset_extra;
-					source = record->reset_source;
-					context = record->reset_scontext;
-					srole = record->reset_srole;
-				}
-
-				if (prohibitValueChange)
-				{
-					/* Release newextra, unless it's reset_extra */
-					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
-
-					if (*conf->variable != newval)
-					{
-						record->status |= GUC_PENDING_RESTART;
-						ereport(elevel,
-								(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-								 errmsg("parameter \"%s\" cannot be changed without restarting the server",
-										record->name)));
-						return 0;
-					}
-					record->status &= ~GUC_PENDING_RESTART;
-					return -1;
-				}
-
-				if (changeVal)
-				{
-					/* Save old value to support transaction abort */
-					if (!makeDefault)
-						push_old_value(record, action);
-
-					if (conf->assign_hook)
-						conf->assign_hook(newval, newextra);
-					*conf->variable = newval;
-					set_extra_field(record, &record->extra,
-									newextra);
-					set_guc_source(record, source);
-					record->scontext = context;
-					record->srole = srole;
-				}
-				if (makeDefault)
-				{
-					if (record->reset_source <= source)
-					{
-						conf->reset_val = newval;
-						set_extra_field(record, &record->reset_extra,
-										newextra);
-						record->reset_source = source;
-						record->reset_scontext = context;
-						record->reset_srole = srole;
-					}
-					for (GucStack *stack = record->stack; stack; stack = stack->prev)
-					{
-						if (stack->source <= source)
-						{
-							stack->prior.val.intval = newval;
-							set_extra_field(record, &stack->prior.extra,
-											newextra);
-							stack->source = source;
-							stack->scontext = context;
-							stack->srole = srole;
-						}
-					}
-				}
-
-				/* Perhaps we didn't install newextra anywhere */
-				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
-				break;
-
-#undef newval
-			}
-
-		case PGC_REAL:
-			{
-				struct config_real *conf = &record->_real;
-
-#define newval (newval_union.realval)
-
-				if (value)
-				{
-					if (!parse_and_validate_value(record, value,
-												  source, elevel,
-												  &newval_union, &newextra))
-						return 0;
-				}
-				else if (source == PGC_S_DEFAULT)
-				{
-					newval = conf->boot_val;
-					if (!call_real_check_hook(record, &newval, &newextra,
-											  source, elevel))
-						return 0;
-				}
-				else
-				{
-					newval = conf->reset_val;
-					newextra = record->reset_extra;
-					source = record->reset_source;
-					context = record->reset_scontext;
-					srole = record->reset_srole;
-				}
-
-				if (prohibitValueChange)
-				{
-					/* Release newextra, unless it's reset_extra */
-					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
-
-					if (*conf->variable != newval)
-					{
-						record->status |= GUC_PENDING_RESTART;
-						ereport(elevel,
-								(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-								 errmsg("parameter \"%s\" cannot be changed without restarting the server",
-										record->name)));
-						return 0;
-					}
-					record->status &= ~GUC_PENDING_RESTART;
-					return -1;
-				}
-
-				if (changeVal)
-				{
-					/* Save old value to support transaction abort */
-					if (!makeDefault)
-						push_old_value(record, action);
-
-					if (conf->assign_hook)
-						conf->assign_hook(newval, newextra);
-					*conf->variable = newval;
-					set_extra_field(record, &record->extra,
-									newextra);
-					set_guc_source(record, source);
-					record->scontext = context;
-					record->srole = srole;
-				}
-				if (makeDefault)
-				{
-					if (record->reset_source <= source)
-					{
-						conf->reset_val = newval;
-						set_extra_field(record, &record->reset_extra,
-										newextra);
-						record->reset_source = source;
-						record->reset_scontext = context;
-						record->reset_srole = srole;
-					}
-					for (GucStack *stack = record->stack; stack; stack = stack->prev)
-					{
-						if (stack->source <= source)
-						{
-							stack->prior.val.realval = newval;
-							set_extra_field(record, &stack->prior.extra,
-											newextra);
-							stack->source = source;
-							stack->scontext = context;
-							stack->srole = srole;
-						}
-					}
-				}
-
-				/* Perhaps we didn't install newextra anywhere */
-				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
-				break;
-
-#undef newval
-			}
-
-		case PGC_STRING:
-			{
-				struct config_string *conf = &record->_string;
-				GucContext	orig_context = context;
-				GucSource	orig_source = source;
-				Oid			orig_srole = srole;
-
-#define newval (newval_union.stringval)
-
-				if (value)
-				{
-					if (!parse_and_validate_value(record, value,
-												  source, elevel,
-												  &newval_union, &newextra))
-						return 0;
-				}
-				else if (source == PGC_S_DEFAULT)
-				{
-					/* non-NULL boot_val must always get strdup'd */
-					if (conf->boot_val != NULL)
-					{
-						newval = guc_strdup(elevel, conf->boot_val);
-						if (newval == NULL)
+						newval = conf->boot_val;
+						if (!call_bool_check_hook(record, &newval, &newextra,
+												  source, elevel))
 							return 0;
 					}
 					else
-						newval = NULL;
-
-					if (!call_string_check_hook(record, &newval, &newextra,
-												source, elevel))
 					{
-						guc_free(newval);
-						return 0;
+						newval = conf->reset_val;
+						newextra = record->reset_extra;
+						source = record->reset_source;
+						context = record->reset_scontext;
+						srole = record->reset_srole;
 					}
-				}
-				else
-				{
-					/*
-					 * strdup not needed, since reset_val is already under
-					 * guc.c's control
-					 */
-					newval = conf->reset_val;
-					newextra = record->reset_extra;
-					source = record->reset_source;
-					context = record->reset_scontext;
-					srole = record->reset_srole;
-				}
 
-				if (prohibitValueChange)
-				{
-					bool		newval_different;
-
-					/* newval shouldn't be NULL, so we're a bit sloppy here */
-					newval_different = (*conf->variable == NULL ||
-										newval == NULL ||
-										strcmp(*conf->variable, newval) != 0);
-
-					/* Release newval, unless it's reset_val */
-					if (newval && !string_field_used(record, newval))
-						guc_free(newval);
-					/* Release newextra, unless it's reset_extra */
-					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
-
-					if (newval_different)
+					if (prohibitValueChange)
 					{
-						record->status |= GUC_PENDING_RESTART;
-						ereport(elevel,
-								(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-								 errmsg("parameter \"%s\" cannot be changed without restarting the server",
-										record->name)));
-						return 0;
-					}
-					record->status &= ~GUC_PENDING_RESTART;
-					return -1;
-				}
+						/* Release newextra, unless it's reset_extra */
+						if (newextra && !extra_field_used(record, newextra))
+							guc_free(newextra);
 
-				if (changeVal)
-				{
-					/* Save old value to support transaction abort */
-					if (!makeDefault)
-						push_old_value(record, action);
-
-					if (conf->assign_hook)
-						conf->assign_hook(newval, newextra);
-					set_string_field(record, conf->variable, newval);
-					set_extra_field(record, &record->extra,
-									newextra);
-					set_guc_source(record, source);
-					record->scontext = context;
-					record->srole = srole;
-
-					/*
-					 * Ugly hack: during SET session_authorization, forcibly
-					 * do SET ROLE NONE with the same context/source/etc, so
-					 * that the effects will have identical lifespan.  This is
-					 * required by the SQL spec, and it's not possible to do
-					 * it within the variable's check hook or assign hook
-					 * because our APIs for those don't pass enough info.
-					 * However, don't do it if is_reload: in that case we
-					 * expect that if "role" isn't supposed to be default, it
-					 * has been or will be set by a separate reload action.
-					 *
-					 * Also, for the call from InitializeSessionUserId with
-					 * source == PGC_S_OVERRIDE, use PGC_S_DYNAMIC_DEFAULT for
-					 * "role"'s source, so that it's still possible to set
-					 * "role" from pg_db_role_setting entries.  (See notes in
-					 * InitializeSessionUserId before changing this.)
-					 *
-					 * A fine point: for RESET session_authorization, we do
-					 * "RESET role" not "SET ROLE NONE" (by passing down NULL
-					 * rather than "none" for the value).  This would have the
-					 * same effects in typical cases, but if the reset value
-					 * of "role" is not "none" it seems better to revert to
-					 * that.
-					 */
-					if (!is_reload &&
-						strcmp(record->name, "session_authorization") == 0)
-						(void) set_config_with_handle("role", NULL,
-													  value ? "none" : NULL,
-													  orig_context,
-													  (orig_source == PGC_S_OVERRIDE)
-													  ? PGC_S_DYNAMIC_DEFAULT
-													  : orig_source,
-													  orig_srole,
-													  action,
-													  true,
-													  elevel,
-													  false);
-				}
-
-				if (makeDefault)
-				{
-					if (record->reset_source <= source)
-					{
-						set_string_field(record, &conf->reset_val, newval);
-						set_extra_field(record, &record->reset_extra,
-										newextra);
-						record->reset_source = source;
-						record->reset_scontext = context;
-						record->reset_srole = srole;
-					}
-					for (GucStack *stack = record->stack; stack; stack = stack->prev)
-					{
-						if (stack->source <= source)
+						if (*conf->variable != newval)
 						{
-							set_string_field(record, &stack->prior.val.stringval,
-											 newval);
-							set_extra_field(record, &stack->prior.extra,
+							record->status |= GUC_PENDING_RESTART;
+							ereport(elevel,
+									(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+									 errmsg("parameter \"%s\" cannot be changed without restarting the server",
+											record->name)));
+							return 0;
+						}
+						record->status &= ~GUC_PENDING_RESTART;
+						return -1;
+					}
+
+					if (changeVal)
+					{
+						/* Save old value to support transaction abort */
+						if (!makeDefault)
+							push_old_value(record, action);
+
+						if (conf->assign_hook)
+							conf->assign_hook(newval, newextra);
+						*conf->variable = newval;
+						set_extra_field(record, &record->extra,
+										newextra);
+						set_guc_source(record, source);
+						record->scontext = context;
+						record->srole = srole;
+					}
+					if (makeDefault)
+					{
+						if (record->reset_source <= source)
+						{
+							conf->reset_val = newval;
+							set_extra_field(record, &record->reset_extra,
 											newextra);
-							stack->source = source;
-							stack->scontext = context;
-							stack->srole = srole;
+							record->reset_source = source;
+							record->reset_scontext = context;
+							record->reset_srole = srole;
+						}
+						for (GucStack *stack = record->stack; stack; stack = stack->prev)
+						{
+							if (stack->source <= source)
+							{
+								stack->prior.val.boolval = newval;
+								set_extra_field(record, &stack->prior.extra,
+												newextra);
+								stack->source = source;
+								stack->scontext = context;
+								stack->srole = srole;
+							}
 						}
 					}
-				}
 
-				/* Perhaps we didn't install newval anywhere */
-				if (newval && !string_field_used(record, newval))
-					guc_free(newval);
-				/* Perhaps we didn't install newextra anywhere */
-				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
-				break;
+					/* Perhaps we didn't install newextra anywhere */
+					if (newextra && !extra_field_used(record, newextra))
+						guc_free(newextra);
+					break;
 
 #undef newval
-			}
+				}
 
-		case PGC_ENUM:
-			{
-				struct config_enum *conf = &record->_enum;
+			case PGC_INT:
+				{
+					struct config_int *conf = &record->_int;
+
+#define newval (newval_union.intval)
+
+					if (value)
+					{
+						if (!parse_and_validate_value(record, value,
+													  source, elevel,
+													  &newval_union, &newextra))
+							return 0;
+					}
+					else if (source == PGC_S_DEFAULT)
+					{
+						newval = conf->boot_val;
+						if (!call_int_check_hook(record, &newval, &newextra,
+												 source, elevel))
+							return 0;
+					}
+					else
+					{
+						newval = conf->reset_val;
+						newextra = record->reset_extra;
+						source = record->reset_source;
+						context = record->reset_scontext;
+						srole = record->reset_srole;
+					}
+
+					if (prohibitValueChange)
+					{
+						/* Release newextra, unless it's reset_extra */
+						if (newextra && !extra_field_used(record, newextra))
+							guc_free(newextra);
+
+						if (*conf->variable != newval)
+						{
+							record->status |= GUC_PENDING_RESTART;
+							ereport(elevel,
+									(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+									 errmsg("parameter \"%s\" cannot be changed without restarting the server",
+											record->name)));
+							return 0;
+						}
+						record->status &= ~GUC_PENDING_RESTART;
+						return -1;
+					}
+
+					if (changeVal)
+					{
+						/* Save old value to support transaction abort */
+						if (!makeDefault)
+							push_old_value(record, action);
+
+						if (conf->assign_hook)
+							conf->assign_hook(newval, newextra);
+						*conf->variable = newval;
+						set_extra_field(record, &record->extra,
+										newextra);
+						set_guc_source(record, source);
+						record->scontext = context;
+						record->srole = srole;
+					}
+					if (makeDefault)
+					{
+						if (record->reset_source <= source)
+						{
+							conf->reset_val = newval;
+							set_extra_field(record, &record->reset_extra,
+											newextra);
+							record->reset_source = source;
+							record->reset_scontext = context;
+							record->reset_srole = srole;
+						}
+						for (GucStack *stack = record->stack; stack; stack = stack->prev)
+						{
+							if (stack->source <= source)
+							{
+								stack->prior.val.intval = newval;
+								set_extra_field(record, &stack->prior.extra,
+												newextra);
+								stack->source = source;
+								stack->scontext = context;
+								stack->srole = srole;
+							}
+						}
+					}
+
+					/* Perhaps we didn't install newextra anywhere */
+					if (newextra && !extra_field_used(record, newextra))
+						guc_free(newextra);
+					break;
+
+#undef newval
+				}
+
+			case PGC_REAL:
+				{
+					struct config_real *conf = &record->_real;
+
+#define newval (newval_union.realval)
+
+					if (value)
+					{
+						if (!parse_and_validate_value(record, value,
+													  source, elevel,
+													  &newval_union, &newextra))
+							return 0;
+					}
+					else if (source == PGC_S_DEFAULT)
+					{
+						newval = conf->boot_val;
+						if (!call_real_check_hook(record, &newval, &newextra,
+												  source, elevel))
+							return 0;
+					}
+					else
+					{
+						newval = conf->reset_val;
+						newextra = record->reset_extra;
+						source = record->reset_source;
+						context = record->reset_scontext;
+						srole = record->reset_srole;
+					}
+
+					if (prohibitValueChange)
+					{
+						/* Release newextra, unless it's reset_extra */
+						if (newextra && !extra_field_used(record, newextra))
+							guc_free(newextra);
+
+						if (*conf->variable != newval)
+						{
+							record->status |= GUC_PENDING_RESTART;
+							ereport(elevel,
+									(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+									 errmsg("parameter \"%s\" cannot be changed without restarting the server",
+											record->name)));
+							return 0;
+						}
+						record->status &= ~GUC_PENDING_RESTART;
+						return -1;
+					}
+
+					if (changeVal)
+					{
+						/* Save old value to support transaction abort */
+						if (!makeDefault)
+							push_old_value(record, action);
+
+						if (conf->assign_hook)
+							conf->assign_hook(newval, newextra);
+						*conf->variable = newval;
+						set_extra_field(record, &record->extra,
+										newextra);
+						set_guc_source(record, source);
+						record->scontext = context;
+						record->srole = srole;
+					}
+					if (makeDefault)
+					{
+						if (record->reset_source <= source)
+						{
+							conf->reset_val = newval;
+							set_extra_field(record, &record->reset_extra,
+											newextra);
+							record->reset_source = source;
+							record->reset_scontext = context;
+							record->reset_srole = srole;
+						}
+						for (GucStack *stack = record->stack; stack; stack = stack->prev)
+						{
+							if (stack->source <= source)
+							{
+								stack->prior.val.realval = newval;
+								set_extra_field(record, &stack->prior.extra,
+												newextra);
+								stack->source = source;
+								stack->scontext = context;
+								stack->srole = srole;
+							}
+						}
+					}
+
+					/* Perhaps we didn't install newextra anywhere */
+					if (newextra && !extra_field_used(record, newextra))
+						guc_free(newextra);
+					break;
+
+#undef newval
+				}
+
+			case PGC_STRING:
+				{
+					struct config_string *conf = &record->_string;
+					GucContext	orig_context = context;
+					GucSource	orig_source = source;
+					Oid			orig_srole = srole;
+
+#define newval (newval_union.stringval)
+
+					if (value)
+					{
+						if (!parse_and_validate_value(record, value,
+													  source, elevel,
+													  &newval_union, &newextra))
+							return 0;
+					}
+					else if (source == PGC_S_DEFAULT)
+					{
+						/* non-NULL boot_val must always get strdup'd */
+						if (conf->boot_val != NULL)
+						{
+							newval = guc_strdup(elevel, conf->boot_val);
+							if (newval == NULL)
+								return 0;
+						}
+						else
+							newval = NULL;
+
+						if (!call_string_check_hook(record, &newval, &newextra,
+													source, elevel))
+						{
+							guc_free(newval);
+							return 0;
+						}
+					}
+					else
+					{
+						/*
+						 * strdup not needed, since reset_val is already under
+						 * guc.c's control
+						 */
+						newval = conf->reset_val;
+						newextra = record->reset_extra;
+						source = record->reset_source;
+						context = record->reset_scontext;
+						srole = record->reset_srole;
+					}
+
+					if (prohibitValueChange)
+					{
+						bool		newval_different;
+
+						/*
+						 * newval shouldn't be NULL, so we're a bit sloppy
+						 * here
+						 */
+						newval_different = (*conf->variable == NULL ||
+											newval == NULL ||
+											strcmp(*conf->variable, newval) != 0);
+
+						/* Release newval, unless it's reset_val */
+						if (newval && !string_field_used(record, newval))
+							guc_free(newval);
+						/* Release newextra, unless it's reset_extra */
+						if (newextra && !extra_field_used(record, newextra))
+							guc_free(newextra);
+
+						if (newval_different)
+						{
+							record->status |= GUC_PENDING_RESTART;
+							ereport(elevel,
+									(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+									 errmsg("parameter \"%s\" cannot be changed without restarting the server",
+											record->name)));
+							return 0;
+						}
+						record->status &= ~GUC_PENDING_RESTART;
+						return -1;
+					}
+
+					if (changeVal)
+					{
+						/* Save old value to support transaction abort */
+						if (!makeDefault)
+							push_old_value(record, action);
+
+						if (conf->assign_hook)
+							conf->assign_hook(newval, newextra);
+						set_string_field(record, conf->variable, newval);
+						set_extra_field(record, &record->extra,
+										newextra);
+						set_guc_source(record, source);
+						record->scontext = context;
+						record->srole = srole;
+
+						/*
+						 * Ugly hack: during SET session_authorization,
+						 * forcibly do SET ROLE NONE with the same
+						 * context/source/etc, so that the effects will have
+						 * identical lifespan.  This is required by the SQL
+						 * spec, and it's not possible to do it within the
+						 * variable's check hook or assign hook because our
+						 * APIs for those don't pass enough info. However,
+						 * don't do it if is_reload: in that case we expect
+						 * that if "role" isn't supposed to be default, it has
+						 * been or will be set by a separate reload action.
+						 *
+						 * Also, for the call from InitializeSessionUserId
+						 * with source == PGC_S_OVERRIDE, use
+						 * PGC_S_DYNAMIC_DEFAULT for "role"'s source, so that
+						 * it's still possible to set "role" from
+						 * pg_db_role_setting entries.  (See notes in
+						 * InitializeSessionUserId before changing this.)
+						 *
+						 * A fine point: for RESET session_authorization, we
+						 * do "RESET role" not "SET ROLE NONE" (by passing
+						 * down NULL rather than "none" for the value).  This
+						 * would have the same effects in typical cases, but
+						 * if the reset value of "role" is not "none" it seems
+						 * better to revert to that.
+						 */
+						if (!is_reload &&
+							strcmp(record->name, "session_authorization") == 0)
+							(void) set_config_with_handle("role", NULL,
+														  value ? "none" : NULL,
+														  orig_context,
+														  (orig_source == PGC_S_OVERRIDE)
+														  ? PGC_S_DYNAMIC_DEFAULT
+														  : orig_source,
+														  orig_srole,
+														  action,
+														  true,
+														  elevel,
+														  false);
+					}
+
+					if (makeDefault)
+					{
+						if (record->reset_source <= source)
+						{
+							set_string_field(record, &conf->reset_val, newval);
+							set_extra_field(record, &record->reset_extra,
+											newextra);
+							record->reset_source = source;
+							record->reset_scontext = context;
+							record->reset_srole = srole;
+						}
+						for (GucStack *stack = record->stack; stack; stack = stack->prev)
+						{
+							if (stack->source <= source)
+							{
+								set_string_field(record, &stack->prior.val.stringval,
+												 newval);
+								set_extra_field(record, &stack->prior.extra,
+												newextra);
+								stack->source = source;
+								stack->scontext = context;
+								stack->srole = srole;
+							}
+						}
+					}
+
+					/* Perhaps we didn't install newval anywhere */
+					if (newval && !string_field_used(record, newval))
+						guc_free(newval);
+					/* Perhaps we didn't install newextra anywhere */
+					if (newextra && !extra_field_used(record, newextra))
+						guc_free(newextra);
+					break;
+
+#undef newval
+				}
+
+			case PGC_ENUM:
+				{
+					struct config_enum *conf = &record->_enum;
 
 #define newval (newval_union.enumval)
 
-				if (value)
-				{
-					if (!parse_and_validate_value(record, value,
-												  source, elevel,
-												  &newval_union, &newextra))
-						return 0;
-				}
-				else if (source == PGC_S_DEFAULT)
-				{
-					newval = conf->boot_val;
-					if (!call_enum_check_hook(record, &newval, &newextra,
-											  source, elevel))
-						return 0;
-				}
-				else
-				{
-					newval = conf->reset_val;
-					newextra = record->reset_extra;
-					source = record->reset_source;
-					context = record->reset_scontext;
-					srole = record->reset_srole;
-				}
-
-				if (prohibitValueChange)
-				{
-					/* Release newextra, unless it's reset_extra */
-					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
-
-					if (*conf->variable != newval)
+					if (value)
 					{
-						record->status |= GUC_PENDING_RESTART;
-						ereport(elevel,
-								(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
-								 errmsg("parameter \"%s\" cannot be changed without restarting the server",
-										record->name)));
-						return 0;
+						if (!parse_and_validate_value(record, value,
+													  source, elevel,
+													  &newval_union, &newextra))
+							return 0;
 					}
-					record->status &= ~GUC_PENDING_RESTART;
-					return -1;
-				}
-
-				if (changeVal)
-				{
-					/* Save old value to support transaction abort */
-					if (!makeDefault)
-						push_old_value(record, action);
-
-					if (conf->assign_hook)
-						conf->assign_hook(newval, newextra);
-					*conf->variable = newval;
-					set_extra_field(record, &record->extra,
-									newextra);
-					set_guc_source(record, source);
-					record->scontext = context;
-					record->srole = srole;
-				}
-				if (makeDefault)
-				{
-					if (record->reset_source <= source)
+					else if (source == PGC_S_DEFAULT)
 					{
-						conf->reset_val = newval;
-						set_extra_field(record, &record->reset_extra,
-										newextra);
-						record->reset_source = source;
-						record->reset_scontext = context;
-						record->reset_srole = srole;
+						newval = conf->boot_val;
+						if (!call_enum_check_hook(record, &newval, &newextra,
+												  source, elevel))
+							return 0;
 					}
-					for (GucStack *stack = record->stack; stack; stack = stack->prev)
+					else
 					{
-						if (stack->source <= source)
+						newval = conf->reset_val;
+						newextra = record->reset_extra;
+						source = record->reset_source;
+						context = record->reset_scontext;
+						srole = record->reset_srole;
+					}
+
+					if (prohibitValueChange)
+					{
+						/* Release newextra, unless it's reset_extra */
+						if (newextra && !extra_field_used(record, newextra))
+							guc_free(newextra);
+
+						if (*conf->variable != newval)
 						{
-							stack->prior.val.enumval = newval;
-							set_extra_field(record, &stack->prior.extra,
+							record->status |= GUC_PENDING_RESTART;
+							ereport(elevel,
+									(errcode(ERRCODE_CANT_CHANGE_RUNTIME_PARAM),
+									 errmsg("parameter \"%s\" cannot be changed without restarting the server",
+											record->name)));
+							return 0;
+						}
+						record->status &= ~GUC_PENDING_RESTART;
+						return -1;
+					}
+
+					if (changeVal)
+					{
+						/* Save old value to support transaction abort */
+						if (!makeDefault)
+							push_old_value(record, action);
+
+						if (conf->assign_hook)
+							conf->assign_hook(newval, newextra);
+						*conf->variable = newval;
+						set_extra_field(record, &record->extra,
+										newextra);
+						set_guc_source(record, source);
+						record->scontext = context;
+						record->srole = srole;
+					}
+					if (makeDefault)
+					{
+						if (record->reset_source <= source)
+						{
+							conf->reset_val = newval;
+							set_extra_field(record, &record->reset_extra,
 											newextra);
-							stack->source = source;
-							stack->scontext = context;
-							stack->srole = srole;
+							record->reset_source = source;
+							record->reset_scontext = context;
+							record->reset_srole = srole;
+						}
+						for (GucStack *stack = record->stack; stack; stack = stack->prev)
+						{
+							if (stack->source <= source)
+							{
+								stack->prior.val.enumval = newval;
+								set_extra_field(record, &stack->prior.extra,
+												newextra);
+								stack->source = source;
+								stack->scontext = context;
+								stack->srole = srole;
+							}
 						}
 					}
-				}
 
-				/* Perhaps we didn't install newextra anywhere */
-				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
-				break;
+					/* Perhaps we didn't install newextra anywhere */
+					if (newextra && !extra_field_used(record, newextra))
+						guc_free(newextra);
+					break;
 
 #undef newval
-			}
-	}
+				}
+		}
 
-	if (changeVal && (record->flags & GUC_REPORT) &&
-		!(record->status & GUC_NEEDS_REPORT))
-	{
-		record->status |= GUC_NEEDS_REPORT;
-		slist_push_head(&guc_report_list, &record->report_link);
+		if (changeVal && (record->flags & GUC_REPORT) &&
+			!(record->status & GUC_NEEDS_REPORT))
+		{
+			record->status |= GUC_NEEDS_REPORT;
+			slist_push_head(&guc_report_list, &record->report_link);
+		}
+/* Success - reparent context to long-lived parent */
+		if (extra_cxt)
+		{
+			MemoryContextSwitchTo(old_context);
+			MemoryContextSetParent(extra_cxt, GUCMemoryContext);
+		}
 	}
+	PG_CATCH();
+	{
+		/* Clean up on error */
+		if (extra_cxt)
+		{
+			MemoryContextSwitchTo(old_context);
+			MemoryContextDelete(extra_cxt);
+		}
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 
 	return changeVal ? 1 : -1;
 }

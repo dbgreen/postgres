@@ -1,0 +1,188 @@
+CREATE EXTENSION test_guc;
+SET test_guc.counter = '42';
+SELECT get_counter_value();
+ get_counter_value 
+-------------------
+                42
+(1 row)
+
+SELECT get_counter_description();
+ get_counter_description 
+-------------------------
+ Count is 42
+(1 row)
+
+SET test_guc.counter = '';
+SELECT get_counter_value();
+ get_counter_value 
+-------------------
+                 0
+(1 row)
+
+SET test_guc.counter = '100';
+BEGIN;
+SET LOCAL test_guc.counter = '200';
+SELECT get_counter_value();
+ get_counter_value 
+-------------------
+               200
+(1 row)
+
+ROLLBACK;
+SELECT get_counter_value();
+ get_counter_value 
+-------------------
+               100
+(1 row)
+
+BEGIN;
+SET LOCAL test_guc.counter = '10';
+SAVEPOINT sp1;
+SET LOCAL test_guc.counter = '20';
+SELECT get_counter_value();
+ get_counter_value 
+-------------------
+                20
+(1 row)
+
+ROLLBACK TO sp1;
+SELECT get_counter_value();
+ get_counter_value 
+-------------------
+                10
+(1 row)
+
+ROLLBACK;
+SET test_guc.pool = 'prod:db1.example.com,db2.example.com,db3.example.com;max_connections=100;timeout=60';
+SELECT count_servers();
+ count_servers 
+---------------
+             3
+(1 row)
+
+SELECT get_pool_setting('pool_name');
+ get_pool_setting 
+------------------
+ prod
+(1 row)
+
+SELECT get_pool_setting('max_connections');
+ get_pool_setting 
+------------------
+ 100
+(1 row)
+
+SELECT get_pool_setting('timeout');
+ get_pool_setting 
+------------------
+ 60
+(1 row)
+
+SELECT show_server_pool();
+   show_server_pool   
+----------------------
+ Pool: prod          +
+ Max connections: 100+
+ Timeout: 60 seconds +
+ Servers (3 total):  +
+   - db1.example.com +
+   - db2.example.com +
+   - db3.example.com +
+ 
+(1 row)
+
+SET test_guc.pool = 'dev:localhost,192.168.1.10;max_connections=5;timeout=30';
+SELECT count_servers();
+ count_servers 
+---------------
+             2
+(1 row)
+
+SELECT get_pool_setting('pool_name');
+ get_pool_setting 
+------------------
+ dev
+(1 row)
+
+SET test_guc.pool = '';
+SELECT count_servers();
+ count_servers 
+---------------
+             0
+(1 row)
+
+SET test_guc.pool = 'pool1:s1,s2;max_connections=10;timeout=20';
+BEGIN;
+SET LOCAL test_guc.pool = 'pool2:s3,s4,s5;max_connections=50;timeout=90';
+SELECT count_servers();
+ count_servers 
+---------------
+             3
+(1 row)
+
+SELECT get_pool_setting('pool_name');
+ get_pool_setting 
+------------------
+ pool2
+(1 row)
+
+ROLLBACK;
+SELECT count_servers();
+ count_servers 
+---------------
+             2
+(1 row)
+
+SELECT get_pool_setting('pool_name');
+ get_pool_setting 
+------------------
+ pool1
+(1 row)
+
+BEGIN;
+SET LOCAL test_guc.pool = 'outer:host1,host2;max_connections=10;timeout=30';
+SAVEPOINT sp1;
+SET LOCAL test_guc.pool = 'inner:host3,host4,host5;max_connections=20;timeout=40';
+SELECT count_servers();
+ count_servers 
+---------------
+             3
+(1 row)
+
+SELECT get_pool_setting('pool_name');
+ get_pool_setting 
+------------------
+ inner
+(1 row)
+
+ROLLBACK TO sp1;
+SELECT count_servers();
+ count_servers 
+---------------
+             2
+(1 row)
+
+SELECT get_pool_setting('pool_name');
+ get_pool_setting 
+------------------
+ outer
+(1 row)
+
+ROLLBACK;
+BEGIN;
+SET LOCAL test_guc.pool = 'first:s1;max_connections=10;timeout=20';
+SET LOCAL test_guc.pool = 'second:s1,s2;max_connections=20;timeout=30';
+SELECT count_servers();
+ count_servers 
+---------------
+             2
+(1 row)
+
+SELECT get_pool_setting('pool_name');
+ get_pool_setting 
+------------------
+ second
+(1 row)
+
+ROLLBACK;
+DROP EXTENSION test_guc;
