@@ -4161,7 +4161,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 	PG_CATCH();
 	{
 		if (extra_context)
-			MemoryContextSwitchTo(extra_context);
+			MemoryContextDelete(extra_context);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
