@@ -771,7 +771,12 @@ set_extra_field(struct config_generic *gconf, void **field, void *newval)
 
 	/* Free old value if it's not NULL and isn't referenced anymore */
 	if (oldval && !extra_field_used(gconf, oldval))
-		guc_free(oldval);
+	{
+		if (gconf->flags & GUC_EXTRA_IS_CONTEXT)
+			MemoryContextDelete(GetMemoryChunkContext(oldval));
+		else
+			guc_free(oldval);
+	}
 }
 
 /*
@@ -3287,6 +3292,8 @@ set_config_with_handle(const char *name, config_handle *handle,
 	void	   *newextra = NULL;
 	bool		prohibitValueChange = false;
 	bool		makeDefault;
+	MemoryContext old_context = NULL;
+	MemoryContext extra_context = NULL;
 
 	if (elevel == 0)
 	{
@@ -3571,6 +3578,15 @@ set_config_with_handle(const char *name, config_handle *handle,
 		changeVal = false;
 	}
 
+	if ((record->flags & GUC_EXTRA_IS_CONTEXT) && value != NULL)
+	{
+		extra_context = AllocSetContextCreate(CurrentMemoryContext,
+											  "GUC extra data",
+											  ALLOCSET_DEFAULT_SIZES);
+		old_context = MemoryContextSwitchTo(extra_context);
+	}
+	PG_TRY();
+	{
 	/*
 	 * Evaluate value and set variable.
 	 */
@@ -4135,6 +4151,23 @@ set_config_with_handle(const char *name, config_handle *handle,
 		record->status |= GUC_NEEDS_REPORT;
 		slist_push_head(&guc_report_list, &record->report_link);
 	}
+
+	if (extra_context)
+	{
+		MemoryContextSwitchTo(old_context);
+		MemoryContextSetParent(extra_context, GUCMemoryContext);
+	}
+	}
+	PG_CATCH();
+	{
+		if (extra_context)
+		{
+			MemoryContextSwitchTo(old_context);
+			MemoryContextDelete(extra_context);
+		}
+		PG_RE_THROW();
+	}
+	PG_END_TRY();
 
 	return changeVal ? 1 : -1;
 }
