@@ -764,6 +764,7 @@ extra_field_used(struct config_generic *gconf, void *extra)
 static void
 set_extra_field(struct config_generic *gconf, void **field, void *newval)
 {
+	MemoryContext ctx = NULL;
 	void	   *oldval = *field;
 
 	/* Do the assignment */
@@ -771,7 +772,15 @@ set_extra_field(struct config_generic *gconf, void **field, void *newval)
 
 	/* Free old value if it's not NULL and isn't referenced anymore */
 	if (oldval && !extra_field_used(gconf, oldval))
-		guc_free(oldval);
+	{
+		if(gconf->flags & GUC_EXTRA_IS_CONTEXT)
+		{
+			ctx = GetMemoryChunkContext(oldval);
+			MemoryContextDelete(ctx);
+		}
+		else
+			guc_free(oldval);
+	}
 }
 
 /*
@@ -6641,9 +6650,21 @@ static bool
 call_bool_check_hook(const struct config_generic *conf, bool *newval, void **extra,
 					 GucSource source, int elevel)
 {
+	MemoryContext extra_cxt = NULL;
+	MemoryContext old_cxt = NULL;
+	bool result;
+
 	/* Quick success if no hook */
 	if (!conf->_bool.check_hook)
 		return true;
+
+	if (conf->flags & GUC_EXTRA_IS_CONTEXT)
+	{
+		extra_cxt = AllocSetContextCreate(CurrentMemoryContext,
+										 "GUC check_hook extra context",
+										 ALLOCSET_DEFAULT_SIZES);
+		old_cxt = MemoryContextSwitchTo(extra_cxt);
+	}
 
 	/* Reset variables that might be set by hook */
 	GUC_check_errcode_value = ERRCODE_INVALID_PARAMETER_VALUE;
@@ -6651,7 +6672,25 @@ call_bool_check_hook(const struct config_generic *conf, bool *newval, void **ext
 	GUC_check_errdetail_string = NULL;
 	GUC_check_errhint_string = NULL;
 
-	if (!conf->_bool.check_hook(newval, extra, source))
+	result = conf->_bool.check_hook(newval, extra, source);
+
+	if (conf->flags & GUC_EXTRA_IS_CONTEXT)
+	{
+		MemoryContextSwitchTo(old_cxt);
+		if (result)
+		{
+			if (*extra != NULL)
+				MemoryContextSetParent(extra_cxt, GUCMemoryContext);
+			else
+				MemoryContextDelete(extra_cxt);
+		}
+		else
+		{
+			MemoryContextDelete(extra_cxt);
+		}
+	}
+
+	if (!result)
 	{
 		ereport(elevel,
 				(errcode(GUC_check_errcode_value),
@@ -6675,9 +6714,21 @@ static bool
 call_int_check_hook(const struct config_generic *conf, int *newval, void **extra,
 					GucSource source, int elevel)
 {
+	MemoryContext extra_cxt = NULL;
+	MemoryContext old_cxt = NULL;
+	bool result;
+
 	/* Quick success if no hook */
 	if (!conf->_int.check_hook)
 		return true;
+
+	if (conf->flags & GUC_EXTRA_IS_CONTEXT)
+	{
+		extra_cxt = AllocSetContextCreate(CurrentMemoryContext,
+										 "GUC check_hook extra context",
+										 ALLOCSET_DEFAULT_SIZES);
+		old_cxt = MemoryContextSwitchTo(extra_cxt);
+	}
 
 	/* Reset variables that might be set by hook */
 	GUC_check_errcode_value = ERRCODE_INVALID_PARAMETER_VALUE;
@@ -6685,7 +6736,25 @@ call_int_check_hook(const struct config_generic *conf, int *newval, void **extra
 	GUC_check_errdetail_string = NULL;
 	GUC_check_errhint_string = NULL;
 
-	if (!conf->_int.check_hook(newval, extra, source))
+	result = conf->_int.check_hook(newval, extra, source);
+
+	if (conf->flags & GUC_EXTRA_IS_CONTEXT)
+	{
+		MemoryContextSwitchTo(old_cxt);
+		if (result)
+		{
+			if (*extra != NULL)
+				MemoryContextSetParent(extra_cxt, GUCMemoryContext);
+			else
+				MemoryContextDelete(extra_cxt);
+		}
+		else
+		{
+			MemoryContextDelete(extra_cxt);
+		}
+	}
+
+	if (!result)
 	{
 		ereport(elevel,
 				(errcode(GUC_check_errcode_value),
@@ -6709,9 +6778,21 @@ static bool
 call_real_check_hook(const struct config_generic *conf, double *newval, void **extra,
 					 GucSource source, int elevel)
 {
+	MemoryContext extra_cxt = NULL;
+	MemoryContext old_cxt = NULL;
+	bool result;
+
 	/* Quick success if no hook */
 	if (!conf->_real.check_hook)
 		return true;
+
+	if (conf->flags & GUC_EXTRA_IS_CONTEXT)
+	{
+		extra_cxt = AllocSetContextCreate(CurrentMemoryContext,
+										 "GUC check_hook extra context",
+										 ALLOCSET_DEFAULT_SIZES);
+		old_cxt = MemoryContextSwitchTo(extra_cxt);
+	}
 
 	/* Reset variables that might be set by hook */
 	GUC_check_errcode_value = ERRCODE_INVALID_PARAMETER_VALUE;
@@ -6719,7 +6800,25 @@ call_real_check_hook(const struct config_generic *conf, double *newval, void **e
 	GUC_check_errdetail_string = NULL;
 	GUC_check_errhint_string = NULL;
 
-	if (!conf->_real.check_hook(newval, extra, source))
+	result = conf->_real.check_hook(newval, extra, source);
+
+	if (conf->flags & GUC_EXTRA_IS_CONTEXT)
+	{
+		MemoryContextSwitchTo(old_cxt);
+		if (result)
+		{
+			if (*extra != NULL)
+				MemoryContextSetParent(extra_cxt, GUCMemoryContext);
+			else
+				MemoryContextDelete(extra_cxt);
+		}
+		else
+		{
+			MemoryContextDelete(extra_cxt);
+		}
+	}
+
+	if (!result)
 	{
 		ereport(elevel,
 				(errcode(GUC_check_errcode_value),
@@ -6743,11 +6842,21 @@ static bool
 call_string_check_hook(const struct config_generic *conf, char **newval, void **extra,
 					   GucSource source, int elevel)
 {
+	MemoryContext extra_cxt = NULL;
+	MemoryContext old_cxt = NULL;
 	volatile bool result = true;
 
 	/* Quick success if no hook */
 	if (!conf->_string.check_hook)
 		return true;
+
+	if (conf->flags & GUC_EXTRA_IS_CONTEXT)
+	{
+		extra_cxt = AllocSetContextCreate(CurrentMemoryContext,
+										 "GUC check_hook extra context",
+										 ALLOCSET_DEFAULT_SIZES);
+		old_cxt = MemoryContextSwitchTo(extra_cxt);
+	}
 
 	/*
 	 * If elevel is ERROR, or if the check_hook itself throws an elog
@@ -6762,7 +6871,9 @@ call_string_check_hook(const struct config_generic *conf, char **newval, void **
 		GUC_check_errdetail_string = NULL;
 		GUC_check_errhint_string = NULL;
 
-		if (!conf->_string.check_hook(newval, extra, source))
+		result = conf->_string.check_hook(newval, extra, source);
+
+		if (!result)
 		{
 			ereport(elevel,
 					(errcode(GUC_check_errcode_value),
@@ -6781,10 +6892,31 @@ call_string_check_hook(const struct config_generic *conf, char **newval, void **
 	}
 	PG_CATCH();
 	{
+		if (conf->flags & GUC_EXTRA_IS_CONTEXT)
+		{
+			MemoryContextSwitchTo(old_cxt);
+			MemoryContextDelete(extra_cxt);
+		}
 		guc_free(*newval);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
+
+	if (conf->flags & GUC_EXTRA_IS_CONTEXT)
+	{
+		MemoryContextSwitchTo(old_cxt);
+		if (result)
+		{
+			if (*extra != NULL)
+				MemoryContextSetParent(extra_cxt, GUCMemoryContext);
+			else
+				MemoryContextDelete(extra_cxt);
+		}
+		else
+		{
+			MemoryContextDelete(extra_cxt);
+		}
+	}
 
 	return result;
 }
@@ -6793,9 +6925,21 @@ static bool
 call_enum_check_hook(const struct config_generic *conf, int *newval, void **extra,
 					 GucSource source, int elevel)
 {
+	MemoryContext extra_cxt = NULL;
+	MemoryContext old_cxt = NULL;
+	bool result;
+
 	/* Quick success if no hook */
 	if (!conf->_enum.check_hook)
 		return true;
+
+	if (conf->flags & GUC_EXTRA_IS_CONTEXT)
+	{
+		extra_cxt = AllocSetContextCreate(CurrentMemoryContext,
+										 "GUC check_hook extra context",
+										 ALLOCSET_DEFAULT_SIZES);
+		old_cxt = MemoryContextSwitchTo(extra_cxt);
+	}
 
 	/* Reset variables that might be set by hook */
 	GUC_check_errcode_value = ERRCODE_INVALID_PARAMETER_VALUE;
@@ -6803,7 +6947,25 @@ call_enum_check_hook(const struct config_generic *conf, int *newval, void **extr
 	GUC_check_errdetail_string = NULL;
 	GUC_check_errhint_string = NULL;
 
-	if (!conf->_enum.check_hook(newval, extra, source))
+	result = conf->_enum.check_hook(newval, extra, source);
+
+	if (conf->flags & GUC_EXTRA_IS_CONTEXT)
+	{
+		MemoryContextSwitchTo(old_cxt);
+		if (result)
+		{
+			if (*extra != NULL)
+				MemoryContextSetParent(extra_cxt, GUCMemoryContext);
+			else
+				MemoryContextDelete(extra_cxt);
+		}
+		else
+		{
+			MemoryContextDelete(extra_cxt);
+		}
+	}
+
+	if (!result)
 	{
 		ereport(elevel,
 				(errcode(GUC_check_errcode_value),
