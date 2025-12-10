@@ -230,10 +230,19 @@ pg_perm_setlocale(int category, const char *locale)
 		case LC_MESSAGES:
 			envvar = "LC_MESSAGES";
 #ifdef WIN32
+#if defined(LIBINTL_VERSION) && (LIBINTL_VERSION >= 0x001401)
+			if (locale == NULL || locale[0] == '\0' ||
+				strcmp(locale, "C") == 0 || strcmp(locale, "POSIX") == 0)
+				result = setlocale(LC_CTYPE, NULL);
+			else
+				result = (char *) locale;
+#else
+			/* Convert to ISO locale name */
 			result = IsoLocaleName(locale);
 			if (result == NULL)
 				result = (char *) locale;
-			elog(DEBUG3, "IsoLocaleName() executed; locale: \"%s\"", result);
+#endif
+		elog(DEBUG3,"LC_MESSAGES locale: \"%s\"", result);
 #endif							/* WIN32 */
 			break;
 #endif							/* LC_MESSAGES */
