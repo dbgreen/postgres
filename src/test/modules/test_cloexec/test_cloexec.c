@@ -34,7 +34,6 @@ main(int argc, char *argv[])
 	char		testfile1[MAXPGPATH];
 	char		testfile2[MAXPGPATH];
 
-	/* Windows-only test */
 #ifndef WIN32
 	fprintf(stderr, "This test only runs on Windows\n");
 	return 0;
@@ -57,7 +56,6 @@ main(int argc, char *argv[])
 
 		run_parent_tests(testfile1, testfile2);
 
-		/* Clean up test files */
 		unlink(testfile1);
 		unlink(testfile2);
 
@@ -78,6 +76,7 @@ run_parent_tests(const char *testfile1, const char *testfile2)
 				fd2;
 	HANDLE		h1,
 				h2;
+	char		exe_path[1024];
 	char		cmdline[1024];
 	STARTUPINFO si;
 	PROCESS_INFORMATION pi;
@@ -106,7 +105,6 @@ run_parent_tests(const char *testfile1, const char *testfile2)
 		exit(1);
 	}
 
-	/* Get Windows HANDLEs from file descriptors */
 	h1 = (HANDLE) _get_osfhandle(fd1);
 	h2 = (HANDLE) _get_osfhandle(fd2);
 
@@ -121,25 +119,8 @@ run_parent_tests(const char *testfile1, const char *testfile2)
 	printf("Parent: fd1=%d (O_CLOEXEC) -> HANDLE=%p\n", fd1, h1);
 	printf("Parent: fd2=%d (no O_CLOEXEC) -> HANDLE=%p\n", fd2, h2);
 
-	/*
-	 * Spawn child process with bInheritHandles=TRUE, passing handle values as
-	 * hex strings
-	 */
-	snprintf(cmdline, sizeof(cmdline), "\"%s\" %p %p",
-			 GetCommandLine(), h1, h2);
-
-	/*
-	 * Find the actual executable path by removing any arguments from
-	 * GetCommandLine().
-	 */
-	{
-		char		exe_path[MAX_PATH];
-		char	   *space_pos;
-
-		GetModuleFileName(NULL, exe_path, sizeof(exe_path));
-		snprintf(cmdline, sizeof(cmdline), "\"%s\" %p %p",
-				 exe_path, h1, h2);
-	}
+	GetModuleFileName(NULL, exe_path, sizeof(exe_path));
+	snprintf(cmdline, sizeof(cmdline), "\"%s\" %p %p", exe_path, h1, h2);
 
 	memset(&si, 0, sizeof(si));
 	si.cb = sizeof(si);
@@ -167,7 +148,6 @@ run_parent_tests(const char *testfile1, const char *testfile2)
 
 	printf("Parent: Waiting for child process...\n");
 
-	/* Wait for child to complete */
 	WaitForSingleObject(pi.hProcess, INFINITE);
 	GetExitCodeProcess(pi.hProcess, &exit_code);
 
@@ -193,12 +173,9 @@ static void
 run_child_tests(const char *handle1_str, const char *handle2_str)
 {
 #ifdef WIN32
-	HANDLE		h1,
-				h2;
-	bool		h1_worked,
-				h2_worked;
+	HANDLE		h1, h2;
+	bool		h1_worked, h2_worked;
 
-	/* Parse handle values from hex strings */
 	if (sscanf(handle1_str, "%p", &h1) != 1 ||
 		sscanf(handle2_str, "%p", &h2) != 1)
 	{
@@ -209,7 +186,6 @@ run_child_tests(const char *handle1_str, const char *handle2_str)
 	printf("Child: Received HANDLE1=%p (should fail - O_CLOEXEC)\n", h1);
 	printf("Child: Received HANDLE2=%p (should work - no O_CLOEXEC)\n", h2);
 
-	/* Try to write to both handles */
 	h1_worked = try_write_to_handle(h1, "HANDLE1");
 	h2_worked = try_write_to_handle(h2, "HANDLE2");
 
