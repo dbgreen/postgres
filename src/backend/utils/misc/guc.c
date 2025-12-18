@@ -200,6 +200,13 @@ static const char *const map_old_guc_names[] = {
 static MemoryContext GUCMemoryContext;
 
 /*
+ * Temporary context for check hook allocations with GUC_EXTRA_IS_CONTEXT.
+ * This is to clean up contexts during error recovery that haven't been
+ * reparented to GUCMemoryContext. There is at most one check operation in
+ * progress at a time, so we can get away with a single static context.
+ */
+static MemoryContext TempCheckHookContext = NULL;
+/*
  * We use a dynahash table to look up GUCs by name, or to iterate through
  * all the GUCs.  The gucname field is redundant with gucvar->name, but
  * dynahash makes it too painful to not store the hash key separately.
@@ -756,6 +763,18 @@ extra_field_used(struct config_generic *gconf, void *extra)
 	return false;
 }
 
+static void
+guc_free_value(struct config_generic *gconf, void *ptr)
+{
+	if (ptr == NULL)
+		return;
+
+	if (gconf->flags & GUC_EXTRA_IS_CONTEXT)
+		MemoryContextDelete(GetMemoryChunkContext(ptr));
+	else
+		guc_free(ptr);
+}
+
 /*
  * Support for assigning to an "extra" field of a GUC item.  Free the prior
  * value if it's not referenced anywhere else in the item (including stacked
@@ -771,7 +790,9 @@ set_extra_field(struct config_generic *gconf, void **field, void *newval)
 
 	/* Free old value if it's not NULL and isn't referenced anymore */
 	if (oldval && !extra_field_used(gconf, oldval))
-		guc_free(oldval);
+	{
+		guc_free_value(gconf, oldval);
+	}
 }
 
 /*
@@ -2410,9 +2431,30 @@ AtEOXact_GUC(bool isCommit, int nestLevel)
 
 	/* Update nesting level */
 	GUCNestLevel = nestLevel - 1;
+
+	 /* Clean up any orphaned check hook context */
+	if (TempCheckHookContext)
+	{
+		MemoryContextDelete(TempCheckHookContext);
+		TempCheckHookContext = NULL;
+	}
 }
 
-
+/*
+ * CleanupTempCheckHookContext: public function to clean up check hook context
+ *
+ * This is for use by postmaster and other non-transactional contexts where
+ * AtEOXact_GUC won't be called.
+ */
+void
+CleanupTempCheckHookContext(void)
+{
+	if (TempCheckHookContext)
+	{
+		MemoryContextDelete(TempCheckHookContext);
+		TempCheckHookContext = NULL;
+	}
+}
 /*
  * Start up automatic reporting of changes to variables marked GUC_REPORT.
  * This is executed at completion of backend startup.
@@ -3926,7 +3968,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 						guc_free(newval);
 					/* Release newextra, unless it's reset_extra */
 					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
+						guc_free_value(record, newextra);
 
 					if (newval_different)
 					{
@@ -4026,7 +4068,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 					guc_free(newval);
 				/* Perhaps we didn't install newextra anywhere */
 				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
+					guc_free_value(record, newextra);
 				break;
 
 #undef newval
@@ -4574,7 +4616,7 @@ AlterSystemSetConfigFile(AlterSystemStmt *altersysstmt)
 
 				if (record->vartype == PGC_STRING && newval.stringval != NULL)
 					guc_free(newval.stringval);
-				guc_free(newextra);
+				guc_free_value(record, newextra);
 			}
 		}
 		else
@@ -6114,7 +6156,7 @@ RestoreGUCState(void *gucstate)
 		 * in.
 		 */
 		Assert(gconf->stack == NULL);
-		guc_free(gconf->extra);
+		guc_free_value(gconf, gconf->extra);
 		guc_free(gconf->last_reported);
 		guc_free(gconf->sourcefile);
 		switch (gconf->vartype)
@@ -6136,7 +6178,7 @@ RestoreGUCState(void *gucstate)
 				}
 		}
 		if (gconf->reset_extra && gconf->reset_extra != gconf->extra)
-			guc_free(gconf->reset_extra);
+			guc_free_value(gconf, gconf->reset_extra);
 		/* Remove it from any lists it's in. */
 		RemoveGUCFromLists(gconf);
 		/* Now we can reset the struct to PGS_S_DEFAULT state. */
@@ -6641,6 +6683,12 @@ static bool
 call_bool_check_hook(const struct config_generic *conf, bool *newval, void **extra,
 					 GucSource source, int elevel)
 {
+	/*
+	 * TempCheckHookContext is used only by string check hooks, but we
+	 * Assert it's not set here to catch any misuses.
+	 */
+	Assert(!TempCheckHookContext);
+
 	/* Quick success if no hook */
 	if (!conf->_bool.check_hook)
 		return true;
@@ -6675,6 +6723,12 @@ static bool
 call_int_check_hook(const struct config_generic *conf, int *newval, void **extra,
 					GucSource source, int elevel)
 {
+	/*
+	 * TempCheckHookContext is used only by string check hooks, but we
+	 * Assert it's not set here to catch any misuses.
+	 */
+	Assert(!TempCheckHookContext);
+
 	/* Quick success if no hook */
 	if (!conf->_int.check_hook)
 		return true;
@@ -6709,6 +6763,12 @@ static bool
 call_real_check_hook(const struct config_generic *conf, double *newval, void **extra,
 					 GucSource source, int elevel)
 {
+	/*
+	 * TempCheckHookContext is used only by string check hooks, but we
+	 * Assert it's not set here to catch any misuses.
+	 */
+	Assert(!TempCheckHookContext);
+
 	/* Quick success if no hook */
 	if (!conf->_real.check_hook)
 		return true;
@@ -6743,12 +6803,23 @@ static bool
 call_string_check_hook(const struct config_generic *conf, char **newval, void **extra,
 					   GucSource source, int elevel)
 {
+	MemoryContext old_ctx = NULL;
 	volatile bool result = true;
 
 	/* Quick success if no hook */
 	if (!conf->_string.check_hook)
 		return true;
 
+	if (conf->flags & GUC_EXTRA_IS_CONTEXT)
+	{
+		Assert(TempCheckHookContext == NULL);
+
+		TempCheckHookContext = AllocSetContextCreate(CurrentMemoryContext,
+														 "GUC string check context",
+														 ALLOCSET_DEFAULT_SIZES);
+		MemoryContextSetIdentifier(TempCheckHookContext, conf->name);
+		old_ctx = MemoryContextSwitchTo(TempCheckHookContext);
+	}
 	/*
 	 * If elevel is ERROR, or if the check_hook itself throws an elog
 	 * (undesirable, but not always avoidable), make sure we don't leak the
@@ -6781,10 +6852,32 @@ call_string_check_hook(const struct config_generic *conf, char **newval, void **
 	}
 	PG_CATCH();
 	{
+		if (TempCheckHookContext)
+		{
+			if (old_ctx)
+				MemoryContextSwitchTo(old_ctx);
+			MemoryContextDelete(TempCheckHookContext);
+			TempCheckHookContext = NULL;
+		}
 		guc_free(*newval);
 		PG_RE_THROW();
 	}
 	PG_END_TRY();
+
+	if (TempCheckHookContext)
+	{
+		MemoryContextSwitchTo(old_ctx);
+
+		if (result && *extra)
+		{
+			MemoryContextSetParent(TempCheckHookContext, GUCMemoryContext);
+		}
+		else
+		{
+			MemoryContextDelete(TempCheckHookContext);
+		}
+		TempCheckHookContext = NULL;
+	}
 
 	return result;
 }
@@ -6793,6 +6886,12 @@ static bool
 call_enum_check_hook(const struct config_generic *conf, int *newval, void **extra,
 					 GucSource source, int elevel)
 {
+	/*
+	 * TempCheckHookContext is used only by string check hooks, but we
+	 * Assert it's not set here to catch any misuses.
+	 */
+	Assert(!TempCheckHookContext);
+
 	/* Quick success if no hook */
 	if (!conf->_enum.check_hook)
 		return true;

@@ -1060,7 +1060,6 @@ check_synchronous_standby_names(char **newval, void **extra, GucSource source)
 	{
 		yyscan_t	scanner;
 		int			parse_rc;
-		SyncRepConfigData *pconf;
 
 		/* Result of parsing is returned in one of these two variables */
 		SyncRepConfigData *syncrep_parse_result = NULL;
@@ -1089,22 +1088,13 @@ check_synchronous_standby_names(char **newval, void **extra, GucSource source)
 			return false;
 		}
 
-		/* GUC extra value must be guc_malloc'd, not palloc'd */
-		pconf = (SyncRepConfigData *)
-			guc_malloc(LOG, syncrep_parse_result->config_size);
-		if (pconf == NULL)
-			return false;
-		memcpy(pconf, syncrep_parse_result, syncrep_parse_result->config_size);
-
-		*extra = pconf;
-
 		/*
-		 * We need not explicitly clean up syncrep_parse_result.  It, and any
-		 * other cruft generated during parsing, will be freed when the
-		 * current memory context is deleted.  (This code is generally run in
-		 * a short-lived context used for config file processing, so that will
-		 * not be very long.)
+		 * With GUC_EXTRA_IS_CONTEXT, the parser allocated syncrep_parse_result
+		 * in TempCheckHookContext. We can use it directly without copying,
+		 * as the infrastructure will reparent the context to GUCMemoryContext
+		 * on success or delete it on failure.
 		 */
+		*extra = syncrep_parse_result;
 	}
 	else
 		*extra = NULL;

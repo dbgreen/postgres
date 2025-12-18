@@ -1208,8 +1208,6 @@ check_temp_tablespaces(char **newval, void **extra, GucSource source)
 	{
 		/* syntax error in name list */
 		GUC_check_errdetail("List syntax is invalid.");
-		pfree(rawname);
-		list_free(namelist);
 		return false;
 	}
 
@@ -1284,19 +1282,15 @@ check_temp_tablespaces(char **newval, void **extra, GucSource source)
 		}
 
 		/* Now prepare an "extra" struct for assign_temp_tablespaces */
-		myextra = guc_malloc(LOG, offsetof(temp_tablespaces_extra, tblSpcs) +
+		myextra = (temp_tablespaces_extra *) palloc(offsetof(temp_tablespaces_extra, tblSpcs) +
 							 numSpcs * sizeof(Oid));
-		if (!myextra)
-			return false;
 		myextra->numSpcs = numSpcs;
 		memcpy(myextra->tblSpcs, tblSpcs, numSpcs * sizeof(Oid));
 		*extra = myextra;
 
-		pfree(tblSpcs);
+
 	}
 
-	pfree(rawname);
-	list_free(namelist);
 
 	return true;
 }
