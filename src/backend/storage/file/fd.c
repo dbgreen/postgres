@@ -4010,8 +4010,6 @@ check_debug_io_direct(char **newval, void **extra, GucSource source)
 	{
 		GUC_check_errdetail("Invalid list syntax in parameter \"%s\".",
 							"debug_io_direct");
-		pfree(rawstring);
-		list_free(elemlist);
 		return false;
 	}
 
@@ -4055,18 +4053,15 @@ check_debug_io_direct(char **newval, void **extra, GucSource source)
 	}
 #endif
 
-	pfree(rawstring);
-	list_free(elemlist);
 #endif
 
 	if (!result)
 		return result;
 
 	/* Save the flags in *extra, for use by assign_debug_io_direct */
-	*extra = guc_malloc(LOG, sizeof(int));
-	if (!*extra)
-		return false;
-	*((int *) *extra) = flags;
+	int *myextra = (int *) palloc(sizeof(int));
+	*myextra = flags;
+	*extra = myextra;
 
 	return result;
 }

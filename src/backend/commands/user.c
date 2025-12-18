@@ -2529,8 +2529,6 @@ check_createrole_self_grant(char **newval, void **extra, GucSource source)
 	{
 		/* syntax error in list */
 		GUC_check_errdetail("List syntax is invalid.");
-		pfree(rawstring);
-		list_free(elemlist);
 		return false;
 	}
 
@@ -2545,18 +2543,11 @@ check_createrole_self_grant(char **newval, void **extra, GucSource source)
 		else
 		{
 			GUC_check_errdetail("Unrecognized key word: \"%s\".", tok);
-			pfree(rawstring);
-			list_free(elemlist);
 			return false;
 		}
 	}
 
-	pfree(rawstring);
-	list_free(elemlist);
-
-	result = (unsigned *) guc_malloc(LOG, sizeof(unsigned));
-	if (!result)
-		return false;
+	result = (unsigned *) palloc(sizeof(unsigned));
 	*result = options;
 	*extra = result;
 

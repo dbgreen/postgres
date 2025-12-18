@@ -2215,9 +2215,8 @@ check_backtrace_functions(char **newval, void **extra, GucSource source)
 	 * whitespace chars to save some memory, but it doesn't seem worth the
 	 * trouble.
 	 */
-	someval = guc_malloc(LOG, newvallen + 1 + 1);
-	if (!someval)
-		return false;
+	someval = (char *) palloc(newvallen + 1 + 1);
+
 	for (i = 0, j = 0; i < newvallen; i++)
 	{
 		if ((*newval)[i] == ',')
@@ -2267,8 +2266,6 @@ check_log_destination(char **newval, void **extra, GucSource source)
 	{
 		/* syntax error in list */
 		GUC_check_errdetail("List syntax is invalid.");
-		pfree(rawstring);
-		list_free(elemlist);
 		return false;
 	}
 
@@ -2293,18 +2290,11 @@ check_log_destination(char **newval, void **extra, GucSource source)
 		else
 		{
 			GUC_check_errdetail("Unrecognized key word: \"%s\".", tok);
-			pfree(rawstring);
-			list_free(elemlist);
 			return false;
 		}
 	}
 
-	pfree(rawstring);
-	list_free(elemlist);
-
-	myextra = (int *) guc_malloc(LOG, sizeof(int));
-	if (!myextra)
-		return false;
+	myextra = (int *) palloc(sizeof(int));
 	*myextra = newlogdest;
 	*extra = myextra;
 

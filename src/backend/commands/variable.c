@@ -261,6 +261,7 @@ bool
 check_timezone(char **newval, void **extra, GucSource source)
 {
 	pg_tz	   *new_tz;
+	pg_tz	  **myextra;
 	long		gmtoffset;
 	char	   *endptr;
 	double		hours;
@@ -285,7 +286,6 @@ check_timezone(char **newval, void **extra, GucSource source)
 		endptr = strchr(val, '\'');
 		if (!endptr || endptr[1] != '\0')
 		{
-			pfree(val);
 			return false;
 		}
 		*endptr = '\0';
@@ -301,17 +301,14 @@ check_timezone(char **newval, void **extra, GucSource source)
 														 ObjectIdGetDatum(InvalidOid),
 														 Int32GetDatum(-1)));
 
-		pfree(val);
 		if (interval->month != 0)
 		{
 			GUC_check_errdetail("Cannot specify months in time zone interval.");
-			pfree(interval);
 			return false;
 		}
 		if (interval->day != 0)
 		{
 			GUC_check_errdetail("Cannot specify days in time zone interval.");
-			pfree(interval);
 			return false;
 		}
 
@@ -319,7 +316,6 @@ check_timezone(char **newval, void **extra, GucSource source)
 		gmtoffset = -(interval->time / USECS_PER_SEC);
 		new_tz = pg_tzset_offset(gmtoffset);
 
-		pfree(interval);
 	}
 	else
 	{
@@ -366,10 +362,9 @@ check_timezone(char **newval, void **extra, GucSource source)
 	/*
 	 * Pass back data for assign_timezone to use
 	 */
-	*extra = guc_malloc(LOG, sizeof(pg_tz *));
-	if (!*extra)
-		return false;
-	*((pg_tz **) *extra) = new_tz;
+	myextra = (pg_tz **) palloc(sizeof(pg_tz *));
+	*myextra = new_tz;
+	*extra = myextra;
 
 	return true;
 }
@@ -418,7 +413,7 @@ bool
 check_log_timezone(char **newval, void **extra, GucSource source)
 {
 	pg_tz	   *new_tz;
-
+	pg_tz	   **myextra;
 	/*
 	 * Assume it is a timezone name, and try to load it.
 	 */
@@ -441,10 +436,9 @@ check_log_timezone(char **newval, void **extra, GucSource source)
 	/*
 	 * Pass back data for assign_log_timezone to use
 	 */
-	*extra = guc_malloc(LOG, sizeof(pg_tz *));
-	if (!*extra)
-		return false;
-	*((pg_tz **) *extra) = new_tz;
+	myextra = (pg_tz **) palloc(sizeof(pg_tz *));
+	*myextra = new_tz;
+	*extra = myextra;
 
 	return true;
 }
@@ -774,10 +768,9 @@ check_client_encoding(char **newval, void **extra, GucSource source)
 	/*
 	 * Save the encoding's ID in *extra, for use by assign_client_encoding.
 	 */
-	*extra = guc_malloc(LOG, sizeof(int));
-	if (!*extra)
-		return false;
-	*((int *) *extra) = encoding;
+	int *myextra = (int *) palloc(sizeof(int));
+	*myextra = encoding;
+	*extra = myextra;
 
 	return true;
 }
@@ -898,9 +891,7 @@ check_session_authorization(char **newval, void **extra, GucSource source)
 	}
 
 	/* Set up "extra" struct for assign_session_authorization to use */
-	myextra = (role_auth_extra *) guc_malloc(LOG, sizeof(role_auth_extra));
-	if (!myextra)
-		return false;
+	myextra = (role_auth_extra *) palloc(sizeof(role_auth_extra));
 	myextra->roleid = roleid;
 	myextra->is_superuser = is_superuser;
 	*extra = myextra;
@@ -1012,9 +1003,7 @@ check_role(char **newval, void **extra, GucSource source)
 	}
 
 	/* Set up "extra" struct for assign_role to use */
-	myextra = (role_auth_extra *) guc_malloc(LOG, sizeof(role_auth_extra));
-	if (!myextra)
-		return false;
+	myextra = (role_auth_extra *) palloc(sizeof(role_auth_extra));
 	myextra->roleid = roleid;
 	myextra->is_superuser = is_superuser;
 	*extra = myextra;

@@ -4886,9 +4886,7 @@ check_recovery_target_lsn(char **newval, void **extra, GucSource source)
 		if (escontext.error_occurred)
 			return false;
 
-		myextra = (XLogRecPtr *) guc_malloc(LOG, sizeof(XLogRecPtr));
-		if (!myextra)
-			return false;
+		myextra = (XLogRecPtr *) palloc(sizeof(XLogRecPtr));
 		*myextra = lsn;
 		*extra = myextra;
 	}
@@ -5064,9 +5062,7 @@ check_recovery_target_timeline(char **newval, void **extra, GucSource source)
 		}
 	}
 
-	myextra = (RecoveryTargetTimeLineGoal *) guc_malloc(LOG, sizeof(RecoveryTargetTimeLineGoal));
-	if (!myextra)
-		return false;
+	myextra = (RecoveryTargetTimeLineGoal *) palloc(sizeof(RecoveryTargetTimeLineGoal));
 	*myextra = rttg;
 	*extra = myextra;
 
@@ -5102,9 +5098,7 @@ check_recovery_target_xid(char **newval, void **extra, GucSource source)
 		if (errno == EINVAL || errno == ERANGE)
 			return false;
 
-		myextra = (TransactionId *) guc_malloc(LOG, sizeof(TransactionId));
-		if (!myextra)
-			return false;
+		myextra = (TransactionId *) palloc(sizeof(TransactionId));
 		*myextra = xid;
 		*extra = myextra;
 	}

@@ -2822,21 +2822,14 @@ check_synchronized_standby_slots(char **newval, void **extra, GucSource source)
 	ok = validate_sync_standby_slots(rawname, &elemlist);
 
 	if (!ok || elemlist == NIL)
-	{
-		pfree(rawname);
-		list_free(elemlist);
 		return ok;
-	}
 
 	/* Compute the size required for the SyncStandbySlotsConfigData struct */
 	size = offsetof(SyncStandbySlotsConfigData, slot_names);
 	foreach_ptr(char, slot_name, elemlist)
 		size += strlen(slot_name) + 1;
 
-	/* GUC extra value must be guc_malloc'd, not palloc'd */
-	config = (SyncStandbySlotsConfigData *) guc_malloc(LOG, size);
-	if (!config)
-		return false;
+	config = (SyncStandbySlotsConfigData *) palloc(size);
 
 	/* Transform the data into SyncStandbySlotsConfigData */
 	config->nslotnames = list_length(elemlist);
@@ -2850,8 +2843,6 @@ check_synchronized_standby_slots(char **newval, void **extra, GucSource source)
 
 	*extra = config;
 
-	pfree(rawname);
-	list_free(elemlist);
 	return true;
 }
 

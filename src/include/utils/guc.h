@@ -228,6 +228,7 @@ typedef enum
 							   0x002000 /* can't set in PG_AUTOCONF_FILENAME */
 #define GUC_RUNTIME_COMPUTED   0x004000 /* delay processing in 'postgres -C' */
 #define GUC_ALLOW_IN_PARALLEL  0x008000 /* allow setting in parallel mode */
+#define GUC_EXTRA_IS_CONTEXT   0x010000 /* extra field is a MemoryContext */
 
 #define GUC_UNIT_KB			 0x01000000 /* value is in kilobytes */
 #define GUC_UNIT_BLOCKS		 0x02000000 /* value is in blocks */
@@ -432,6 +433,7 @@ extern void AtStart_GUC(void);
 extern int	NewGUCNestLevel(void);
 extern void RestrictSearchPath(void);
 extern void AtEOXact_GUC(bool isCommit, int nestLevel);
+extern void CleanupTempCheckHookContext(void);
 extern void BeginReportingGUCOptions(void);
 extern void ReportChangedGUCOptions(void);
 extern void ParseLongOption(const char *string, char **name, char **value);

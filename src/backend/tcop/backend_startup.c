@@ -1091,29 +1091,19 @@ check_log_connections(char **newval, void **extra, GucSource source)
 	if (!SplitIdentifierString(rawstring, ',', &elemlist))
 	{
 		GUC_check_errdetail("Invalid list syntax in parameter \"%s\".", "log_connections");
-		pfree(rawstring);
-		list_free(elemlist);
 		return false;
 	}
 
 	/* Validation logic is all in the helper */
-	success = validate_log_connections_options(elemlist, &flags);
-
-	/* Time for cleanup */
-	pfree(rawstring);
-	list_free(elemlist);
-
-	if (!success)
+	if (!validate_log_connections_options(elemlist, &flags))
 		return false;
 
 	/*
-	 * We succeeded, so allocate `extra` and save the flags there for use by
-	 * assign_log_connections().
+	 * Allocate storage and set extra to have flags.
 	 */
-	*extra = guc_malloc(LOG, sizeof(int));
-	if (!*extra)
-		return false;
-	*((int *) *extra) = flags;
+	int *myextra = (int *) palloc(sizeof(int));
+	*myextra = flags;
+	*extra = myextra;
 
 	return true;
 }

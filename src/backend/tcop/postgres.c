@@ -3630,8 +3630,6 @@ check_restrict_nonsystem_relation_kind(char **newval, void **extra, GucSource so
 	{
 		/* syntax error in list */
 		GUC_check_errdetail("List syntax is invalid.");
-		pfree(rawstring);
-		list_free(elemlist);
 		return false;
 	}
 
@@ -3646,20 +3644,14 @@ check_restrict_nonsystem_relation_kind(char **newval, void **extra, GucSource so
 		else
 		{
 			GUC_check_errdetail("Unrecognized key word: \"%s\".", tok);
-			pfree(rawstring);
-			list_free(elemlist);
 			return false;
 		}
 	}
 
-	pfree(rawstring);
-	list_free(elemlist);
-
 	/* Save the flags in *extra, for use by the assign function */
-	*extra = guc_malloc(LOG, sizeof(int));
-	if (!*extra)
-		return false;
-	*((int *) *extra) = flags;
+	int *myextra = (int *) palloc(sizeof(int));
+	*myextra = flags;
+	*extra = myextra;
 
 	return true;
 }
