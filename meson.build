@@ -1329,9 +1329,26 @@ if not pyopt.disabled()
   pm = import('python')
   python3_inst = pm.find_installation(python.full_path(), required: pyopt)
   if python3_inst.found()
-    python3_dep = python3_inst.dependency(embed: true, required: pyopt)
+    # For Limited API on MSVC, link against python3.lib instead of python3XX.lib.
+    # Meson doesn't handle this automatically:
+    # <https://github.com/mesonbuild/meson/issues/13824>
+    if host_system == 'windows' and cc.get_id() == 'msvc'
+      python3_prefix = python3_inst.get_variable('prefix')
+      python3_libdir = python3_prefix / 'libs'
+      python3_incdir = python3_prefix / 'include'
+      python3_lib = cc.find_library('python3', dirs: python3_libdir, required: pyopt)
+      python3_dep = declare_dependency(
+        include_directories: include_directories(python3_incdir),
+        dependencies: python3_lib,
+      )
+      # Explicit args needed for older Meson compatibility
+      python3_header_check_args = ['/I' + python3_incdir]
+    else
+      python3_dep = python3_inst.dependency(embed: true, required: pyopt)
+      python3_header_check_args = []
+    endif
     # Remove this check after we depend on Meson >= 1.1.0
-    if not cc.check_header('Python.h', dependencies: python3_dep, required: pyopt, include_directories: postgres_inc)
+    if not cc.check_header('Python.h', args: python3_header_check_args, dependencies: python3_dep, required: pyopt, include_directories: postgres_inc)
       python3_dep = not_found_dep
     endif
   endif
