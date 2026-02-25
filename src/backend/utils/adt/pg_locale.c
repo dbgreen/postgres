@@ -179,12 +179,26 @@ pg_perm_setlocale(int category, const char *locale)
 #else
 
 	/*
-	 * On Windows, setlocale(LC_MESSAGES) does not work, so just assume that
-	 * the given value is good and set it in the environment variables. We
-	 * must ignore attempts to set to "", which means "keep using the old
-	 * environment value".
+	 * On Windows, UCRT does not natively support LC_MESSAGES, but when
+	 * ENABLE_NLS is defined, libintl.h overrides setlocale() with
+	 * libintl_setlocale() which handles LC_MESSAGES internally.  For
+	 * gettext 0.20+, we must call libintl_setlocale() directly because
+	 * pgwin32_setlocale passes through to UCRT which does not support
+	 * LC_MESSAGES (category 1729).  For older gettext, just set result
+	 * and rely on the environment variable below.  We must ignore
+	 * attempts to set to "", which means "keep using the old value".
 	 */
-#ifdef LC_MESSAGES
+#if defined(LC_MESSAGES) && defined(ENABLE_NLS) && \
+	defined(LIBINTL_VERSION) && (LIBINTL_VERSION >= 0x001400)
+	if (category == LC_MESSAGES)
+	{
+		if (locale == NULL || locale[0] == '\0')
+			return (char *) locale;
+		libintl_setlocale(LC_MESSAGES, locale);
+		result = (char *) locale;
+	}
+	else
+#elif defined(LC_MESSAGES)
 	if (category == LC_MESSAGES)
 	{
 		result = (char *) locale;
@@ -232,12 +246,18 @@ pg_perm_setlocale(int category, const char *locale)
 #ifdef LC_MESSAGES
 		case LC_MESSAGES:
 			envvar = "LC_MESSAGES";
-#ifdef WIN32
+#if defined(WIN32) && (!defined(LIBINTL_VERSION) || \
+	(LIBINTL_VERSION < 0x001400))
+			/*
+			 * For gettext < 0.20, convert Windows locale names to POSIX
+			 * format for the environment variable, since older gettext
+			 * uses POSIX names for .mo file directory lookup.  gettext
+			 * 0.20+ handles Windows locale names natively.
+			 */
 			result = IsoLocaleName(locale);
 			if (result == NULL)
 				result = (char *) locale;
-			elog(DEBUG3, "IsoLocaleName() executed; locale: \"%s\"", result);
-#endif							/* WIN32 */
+#endif
 			break;
 #endif							/* LC_MESSAGES */
 		case LC_MONETARY:
@@ -415,6 +435,9 @@ assign_locale_messages(const char *newval, void *extra)
 #ifdef LC_MESSAGES
 	(void) pg_perm_setlocale(LC_MESSAGES, newval);
 #endif
+
+	/* Re-probe whether a message catalog is available for the new locale */
+	nls_probe_locale();
 }
 
 

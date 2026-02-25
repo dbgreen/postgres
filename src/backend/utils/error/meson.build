@@ -6,3 +6,7 @@ backend_sources += files(
   'elog.c',
   'jsonlog.c',
 )
+
+if host_system == 'windows'
+  backend_sources += files('nls_mo_reader.c')
+endif

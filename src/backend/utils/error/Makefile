@@ -18,4 +18,8 @@ OBJS = \
 	elog.o \
 	jsonlog.o
 
+ifeq ($(PORTNAME), win32)
+OBJS += nls_mo_reader.o
+endif
+
 include $(top_srcdir)/src/backend/common.mk

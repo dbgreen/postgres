@@ -1896,5 +1896,12 @@ pg_bindtextdomain(const char *domain)
 		bindtextdomain(domain, locale_path);
 		pg_bind_textdomain_codeset(domain);
 	}
+
+	/*
+	 * Register the domain for eager .mo file loading.  If the locale has
+	 * already been probed, this loads the .mo file immediately; otherwise
+	 * it will be loaded when nls_probe_locale() runs.
+	 */
+	nls_register_domain(domain);
 #endif
 }

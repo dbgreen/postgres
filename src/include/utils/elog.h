@@ -508,6 +508,13 @@ extern void log_status_format(StringInfo buf, const char *format,
 extern void DebugFileOpen(void);
 extern char *unpack_sql_state(int sql_state);
 extern bool in_error_recursion_trouble(void);
+#if defined(_WIN32)
+extern bool nls_available;
+extern const char *nls_lookup(const char *msgid);
+extern const char *nls_lookup_domain(const char *domain, const char *msgid);
+#endif
+extern void nls_probe_locale(void);
+extern void nls_register_domain(const char *domain);
 
 /* Common functions shared across destinations */
 extern void reset_formatted_start_time(void);

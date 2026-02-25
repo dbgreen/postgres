@@ -90,6 +90,52 @@
 #undef _
 #define _(x) err_gettext(x)
 
+/*
+ * NLS translation dispatch.
+ *
+ * On Windows, translations use a direct .mo file reader (nls_mo_reader.c)
+ * to avoid gettext 0.20+'s per-call overhead from locale enumeration.
+ * On other platforms, gettext is efficient and we call it directly.
+ */
+#if defined(_WIN32)
+/*
+ * On Windows, nls_mo_reader.c provides all NLS symbols: nls_available,
+ * nls_lookup, nls_lookup_domain, nls_probe_locale, nls_register_domain.
+ * It handles both ENABLE_NLS and !ENABLE_NLS cases.
+ */
+#elif defined(ENABLE_NLS)
+/* On non-Windows, gettext is efficient --- use it directly */
+static const bool nls_available = true;
+#define nls_lookup(msgid)                gettext(msgid)
+#define nls_lookup_domain(domain, msgid) dgettext((domain), (msgid))
+
+void
+nls_probe_locale(void)
+{
+	/* On non-Windows, gettext handles locale changes internally */
+}
+
+void
+nls_register_domain(const char *domain)
+{
+	/* On non-Windows, gettext handles domain registration internally */
+}
+#else							/* !ENABLE_NLS */
+/* Without NLS, there are never translations to look up. */
+static const bool nls_available = false;
+#define nls_lookup(msgid)                (msgid)
+#define nls_lookup_domain(domain, msgid) (msgid)
+
+void
+nls_probe_locale(void)
+{
+}
+
+void
+nls_register_domain(const char *domain)
+{
+}
+#endif
 
 /* Global variables */
 ErrorContextCallback *error_context_stack = NULL;
@@ -309,8 +355,12 @@ err_gettext(const char *str)
 #ifdef ENABLE_NLS
 	if (in_error_recursion_trouble())
 		return str;
-	else
-		return gettext(str);
+
+	/* Skip translation when no message catalog is loaded */
+	if (likely(!nls_available))
+		return str;
+
+	return nls_lookup(str);
 #else
 	return str;
 #endif
@@ -1003,8 +1053,8 @@ errcode_for_socket_access(void)
 	{ \
 		StringInfoData	buf; \
 		/* Internationalize the error format string */ \
-		if ((translateit) && !in_error_recursion_trouble()) \
-			fmt = dgettext((domain), fmt);				  \
+		if ((translateit) && nls_available && !in_error_recursion_trouble()) \
+			fmt = nls_lookup_domain((domain), fmt); \
 		initStringInfo(&buf); \
 		if ((appendval) && edata->targetfield) { \
 			appendStringInfoString(&buf, edata->targetfield); \
@@ -1040,7 +1090,7 @@ errcode_for_socket_access(void)
 		const char	   *fmt; \
 		StringInfoData	buf; \
 		/* Internationalize the error format string */ \
-		if (!in_error_recursion_trouble()) \
+		if (nls_available && !in_error_recursion_trouble()) \
 			fmt = dngettext((domain), fmt_singular, fmt_plural, n); \
 		else \
 			fmt = (n == 1 ? fmt_singular : fmt_plural); \
