@@ -3609,6 +3609,21 @@ installed_targets = [
   ecpg_targets,
 ]
 
+# On Windows, meson adds the output directory of each dependency target to
+# PATH so that DLLs can be found. The .mo translation targets produce files
+# in hundreds of locale-specific directories (e.g. po/fr/LC_MESSAGES/), none
+# of which contain DLLs. Including them in test 'depends' bloats PATH beyond
+# the ~32k character Windows environment limit, causing process creation to
+# fail. Use this list (without nls_mo_targets) for test dependencies.
+installed_targets_for_tests = [
+  backend_targets,
+  bin_targets,
+  libpq_targets,
+  pl_targets,
+  contrib_targets,
+  ecpg_targets,
+]
+
 # all targets that require building code
 all_built = [
   installed_targets,
@@ -3676,7 +3691,7 @@ test('tmp_install',
     priority: setup_tests_priority,
     timeout: 300,
     is_parallel: false,
-    depends: installed_targets,
+    depends: installed_targets_for_tests,
     suite: ['setup'])
 
 test('install_test_files',
