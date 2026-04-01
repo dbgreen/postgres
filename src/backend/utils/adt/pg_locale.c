@@ -237,6 +237,17 @@ pg_perm_setlocale(int category, const char *locale)
 			if (result == NULL)
 				result = (char *) locale;
 			elog(DEBUG3, "IsoLocaleName() executed; locale: \"%s\"", result);
+
+			/*
+			 * Use the libintl_setlocale function provided by libintl so
+			 * it invalidates its translation cache (_nl_msg_cat_cntr) as
+			 * needed.  Without this, resetting lc_messages to a different
+			 * locale at runtime returns stale translations from the
+			 * previous locale.
+			 */
+#if defined(_MSC_VER) && defined(ENABLE_NLS)
+			(void) libintl_setlocale(LC_MESSAGES, result);
+#endif
 #endif							/* WIN32 */
 			break;
 #endif							/* LC_MESSAGES */
