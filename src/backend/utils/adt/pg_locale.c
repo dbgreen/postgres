@@ -237,6 +237,23 @@ pg_perm_setlocale(int category, const char *locale)
 			if (result == NULL)
 				result = (char *) locale;
 			elog(DEBUG3, "IsoLocaleName() executed; locale: \"%s\"", result);
+
+			/*
+			 * Notify libintl of the LC_MESSAGES change so it invalidates
+			 * its translation cache (_nl_msg_cat_cntr).  Without this,
+			 * switching lc_messages at runtime returns stale translations
+			 * from the previous locale.
+			 *
+			 * We must call libintl_setlocale directly because on MSVC the
+			 * setlocale-to-libintl redirect does not work, and the CRT's
+			 * setlocale does not support LC_MESSAGES (category 1729).
+			 * We pass the POSIX name from IsoLocaleName (e.g. "en_US")
+			 * rather than the Windows-format input (e.g.
+			 * "English_United States.1252").
+			 */
+#ifdef ENABLE_NLS
+			(void) libintl_setlocale(LC_MESSAGES, result);
+#endif
 #endif							/* WIN32 */
 			break;
 #endif							/* LC_MESSAGES */
