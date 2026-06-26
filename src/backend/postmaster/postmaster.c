@@ -120,6 +120,7 @@
 #include "tcop/tcopprot.h"
 #include "utils/datetime.h"
 #include "utils/memutils.h"
+#include "utils/pg_trace_etw.h"
 #include "utils/pidfile.h"
 #include "utils/timestamp.h"
 #include "utils/varlena.h"
@@ -508,6 +509,9 @@ PostmasterMain(int argc, char *argv[])
 	PostmasterPid = MyProcPid;
 
 	IsPostmasterEnvironment = true;
+
+	/* Register with the ETW provider (a no-op unless built with "etw"). */
+	pg_trace_etw_register();
 
 	/*
 	 * Start our win32 signal implementation

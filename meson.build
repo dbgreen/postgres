@@ -1128,6 +1128,30 @@ endif
 
 
 ###############################################################
+# Feature: ETW (Event Tracing for Windows)
+###############################################################
+
+etwopt = get_option('etw')
+etw = false
+if host_system == 'windows' and not etwopt.disabled()
+  if cc.has_header('TraceLoggingProvider.h', required: false)
+    etw = true
+    cdata.set('USE_ETW', 1)
+  elif etwopt.enabled()
+    error('ETW support requested but <TraceLoggingProvider.h> not found')
+  endif
+elif etwopt.enabled()
+  error('ETW support is only available on Windows')
+endif
+
+# Only one backend can generate probes.h from probes.d.
+if etw and dtrace.found()
+  error('ETW and DTrace probe support are mutually exclusive')
+endif
+
+
+
+###############################################################
 # Library: libxml
 ###############################################################
 

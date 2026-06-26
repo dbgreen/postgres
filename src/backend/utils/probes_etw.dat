@@ -1,0 +1,105 @@
+# ETW probe policy for PostgreSQL static probes
+#
+# Copyright (c) 2026, PostgreSQL Global Development Group
+#
+# src/backend/utils/probes_etw.dat
+#
+# This file supplies the ETW-specific policy that probes.d does not carry:
+# the keyword and level each probe is emitted under, plus a semantic name for
+# every probe argument (what WPA and other consumers display).  probes.d
+# remains the single source of truth for argument count, order, and type;
+# Gen_etw_probes.pl cross-checks the two and fails the build if they disagree
+# (a probe missing from either file, or a field-name count that does not match
+# the probes.d argument count).
+#
+# Field names are taken from the documented argument meanings in
+# doc/src/sgml/monitoring.sgml (the "Built-in Probes" table).
+#
+# Columns, whitespace-separated:
+#   <probe-name>  <keyword>  <level>  [field-name ...]
+#
+# <probe-name>  matches probes.d exactly, double underscores and all.
+# <keyword>     one of the PG_KW_* subsystem tokens (see pg_trace_etw.h):
+#                 QUERY TRANSACTION LOCK BUFFER STORAGE WAL CHECKPOINT SORT
+# <level>       INFO    -> WINEVENT_LEVEL_INFO    (low volume, default-on)
+#               VERBOSE -> WINEVENT_LEVEL_VERBOSE (high volume, opt-in)
+# field names   one per probes.d argument, in order; omit for zero-arg probes.
+
+# -- Transaction -----------------------------------------------------------
+transaction__start                  TRANSACTION  INFO     lxid
+transaction__commit                 TRANSACTION  INFO     lxid
+transaction__abort                  TRANSACTION  INFO     lxid
+
+# -- Lightweight locks (high volume) ---------------------------------------
+lwlock__acquire                     LOCK         VERBOSE  tranche mode
+lwlock__release                     LOCK         VERBOSE  tranche
+lwlock__wait__start                 LOCK         VERBOSE  tranche mode
+lwlock__wait__done                  LOCK         VERBOSE  tranche mode
+lwlock__condacquire                 LOCK         VERBOSE  tranche mode
+lwlock__condacquire__fail           LOCK         VERBOSE  tranche mode
+lwlock__acquire__or__wait           LOCK         VERBOSE  tranche mode
+lwlock__acquire__or__wait__fail     LOCK         VERBOSE  tranche mode
+
+# -- Heavyweight locks (rare, high interest) -------------------------------
+lock__wait__start                   LOCK         INFO     locktag_field1 locktag_field2 locktag_field3 locktag_field4 locktag_type mode
+lock__wait__done                    LOCK         INFO     locktag_field1 locktag_field2 locktag_field3 locktag_field4 locktag_type mode
+
+# -- Query processing ------------------------------------------------------
+query__parse__start                 QUERY        INFO     query
+query__parse__done                  QUERY        INFO     query
+query__rewrite__start               QUERY        INFO     query
+query__rewrite__done                QUERY        INFO     query
+query__plan__start                  QUERY        INFO
+query__plan__done                   QUERY        INFO
+query__execute__start               QUERY        INFO
+query__execute__done                QUERY        INFO
+query__start                        QUERY        INFO     query
+query__done                         QUERY        INFO     query
+statement__status                   QUERY        INFO     status
+
+# -- Sort ------------------------------------------------------------------
+sort__start                         SORT         VERBOSE  sort_type unique num_keys workmem_kb random_access parallel_kind
+sort__done                          SORT         VERBOSE  is_external space_used
+
+# -- Buffer manager: per-buffer I/O (high volume) --------------------------
+buffer__read__start                 BUFFER       VERBOSE  forknum blocknum spcoid dboid reloid creator_procno
+buffer__read__done                  BUFFER       VERBOSE  forknum blocknum spcoid dboid reloid creator_procno found
+buffer__flush__start                BUFFER       VERBOSE  forknum blocknum spcoid dboid reloid
+buffer__flush__done                 BUFFER       VERBOSE  forknum blocknum spcoid dboid reloid
+buffer__extend__start               BUFFER       VERBOSE  forknum spcoid dboid reloid creator_procno extend_by
+buffer__extend__done                BUFFER       VERBOSE  forknum spcoid dboid reloid creator_procno extend_by first_block
+
+# -- Buffer manager: checkpoint phases (per-checkpoint, low volume) --------
+buffer__checkpoint__start           BUFFER       INFO     flags
+buffer__checkpoint__sync__start     BUFFER       INFO
+buffer__checkpoint__done            BUFFER       INFO
+buffer__sync__start                 BUFFER       INFO     num_buffers num_dirty
+buffer__sync__written               BUFFER       VERBOSE  buffer_id
+buffer__sync__done                  BUFFER       INFO     num_buffers num_written num_expected
+
+# -- Deadlock --------------------------------------------------------------
+deadlock__found                     LOCK         INFO
+
+# -- Checkpoint ------------------------------------------------------------
+checkpoint__start                   CHECKPOINT   INFO     flags
+checkpoint__done                    CHECKPOINT   INFO     num_buffers num_total wal_added wal_removed wal_recycled
+clog__checkpoint__start             CHECKPOINT   INFO     is_normal
+clog__checkpoint__done              CHECKPOINT   INFO     is_normal
+subtrans__checkpoint__start         CHECKPOINT   INFO     is_normal
+subtrans__checkpoint__done          CHECKPOINT   INFO     is_normal
+multixact__checkpoint__start        CHECKPOINT   INFO     is_normal
+multixact__checkpoint__done         CHECKPOINT   INFO     is_normal
+twophase__checkpoint__start         CHECKPOINT   INFO
+twophase__checkpoint__done          CHECKPOINT   INFO
+
+# -- Storage manager (md): per-block disk I/O (high volume) ----------------
+smgr__md__read__start               STORAGE      VERBOSE  forknum blocknum spcoid dboid reloid creator_procno
+smgr__md__read__done                STORAGE      VERBOSE  forknum blocknum spcoid dboid reloid creator_procno bytes_read bytes_requested
+smgr__md__write__start              STORAGE      VERBOSE  forknum blocknum spcoid dboid reloid creator_procno
+smgr__md__write__done               STORAGE      VERBOSE  forknum blocknum spcoid dboid reloid creator_procno bytes_written bytes_requested
+
+# -- WAL -------------------------------------------------------------------
+wal__insert                         WAL          VERBOSE  rmid info
+wal__switch                         WAL          INFO
+wal__buffer__write__dirty__start    WAL          VERBOSE
+wal__buffer__write__dirty__done     WAL          VERBOSE
