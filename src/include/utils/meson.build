@@ -51,6 +51,20 @@ if dtrace.found()
     install: true,
     install_dir: dir_include_server / 'utils',
   )
+elif etw
+  # ETW backend: generate TraceLogging macros from probes.d (argument types)
+  # and probes_etw.dat (keyword/level/field-name policy).
+  probes = custom_target('probes.h',
+    input: files(
+      '../../backend/utils/probes.d',
+      '../../backend/utils/probes_etw.dat'),
+    output: 'probes.h',
+    capture: true,
+    command: [perl, files('../../backend/utils/Gen_etw_probes.pl'),
+      '@INPUT0@', '@INPUT1@'],
+    install: true,
+    install_dir: dir_include_server / 'utils',
+  )
 else
   probes = custom_target('probes.h',
     input: files('../../backend/utils/probes.d'),
