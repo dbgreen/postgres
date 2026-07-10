@@ -1,0 +1,5 @@
+# pgpatch extension
+comment = 'Janet REPL that hot-patches backend functions'
+default_version = '1.0'
+module_pathname = '$libdir/pgpatch'
+relocatable = true
