@@ -25,7 +25,11 @@
 #include "postgres.h"
 
 #include <dlfcn.h>
-#include <ffi/ffi.h>
+#ifdef __APPLE__
+#include <ffi/ffi.h>			/* SDK layout */
+#else
+#include <ffi.h>
+#endif
 #include <setjmp.h>
 #include <signal.h>
 #include <stdlib.h>

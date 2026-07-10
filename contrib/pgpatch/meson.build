@@ -1,5 +1,12 @@
 # Copyright (c) 2022-2026, PostgreSQL Global Development Group
 
+# pgpatch is macOS/arm64-only for now (it uses mach_vm code patching, dyld and
+# Mach-O symbol search, and .dSYM DWARF).  Skip it cleanly on other platforms
+# so it doesn't break the rest of the build; relax this when a port lands.
+if host_machine.system() != 'darwin' or host_machine.cpu_family() != 'aarch64'
+  subdir_done()
+endif
+
 # Build the vendored Janet amalgamation on its own with warnings disabled: it
 # is third-party C99 code and trips many of Postgres's stricter warnings.
 janet_inc = include_directories('vendor/janet')
