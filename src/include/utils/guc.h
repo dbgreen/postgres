@@ -228,7 +228,7 @@ typedef enum
 							   0x002000 /* can't set in PG_AUTOCONF_FILENAME */
 #define GUC_RUNTIME_COMPUTED   0x004000 /* delay processing in 'postgres -C' */
 #define GUC_ALLOW_IN_PARALLEL  0x008000 /* allow setting in parallel mode */
-
+#define GUC_EXTRA_IS_CONTEXT   0x010000 /* extra field is context pointer */
 #define GUC_UNIT_KB			 0x01000000 /* value is in kilobytes */
 #define GUC_UNIT_BLOCKS		 0x02000000 /* value is in blocks */
 #define GUC_UNIT_XBLOCKS	 0x03000000 /* value is in xlog blocks */
@@ -243,6 +243,11 @@ typedef enum
 
 #define GUC_UNIT			 (GUC_UNIT_MEMORY | GUC_UNIT_TIME)
 
+typedef struct GucContextExtra
+{
+	MemoryContext context;		/* context to use */
+	void		*data;		/* extra data as needed */
+} GucContextExtra;
 
 /* GUC vars that are actually defined in guc_tables.c, rather than elsewhere */
 extern PGDLLIMPORT bool Debug_print_plan;

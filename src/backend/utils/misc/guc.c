@@ -757,6 +757,22 @@ extra_field_used(struct config_generic *gconf, void *extra)
 	return false;
 }
 
+static void
+free_extra_value(const struct config_generic *gconf, void *extra)
+{
+	if (extra == NULL)
+		return;
+
+	if (gconf->flags & GUC_EXTRA_IS_CONTEXT)
+	{
+		GucContextExtra *wrapper = (GucContextExtra *) extra;
+		MemoryContextDelete(wrapper->context);
+		guc_free(wrapper);
+	}
+	else
+		guc_free(extra);
+}
+
 /*
  * Support for assigning to an "extra" field of a GUC item.  Free the prior
  * value if it's not referenced anywhere else in the item (including stacked
@@ -772,7 +788,7 @@ set_extra_field(struct config_generic *gconf, void **field, void *newval)
 
 	/* Free old value if it's not NULL and isn't referenced anymore */
 	if (oldval && !extra_field_used(gconf, oldval))
-		guc_free(oldval);
+		free_extra_value(gconf, oldval);
 }
 
 /*
@@ -3647,7 +3663,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 				{
 					/* Release newextra, unless it's reset_extra */
 					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
+						free_extra_value(record, newextra);
 
 					if (*conf->variable != newval)
 					{
@@ -3704,7 +3720,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 
 				/* Perhaps we didn't install newextra anywhere */
 				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
+					free_extra_value(record, newextra);
 				break;
 
 #undef newval
@@ -3743,7 +3759,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 				{
 					/* Release newextra, unless it's reset_extra */
 					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
+						free_extra_value(record, newextra);
 
 					if (*conf->variable != newval)
 					{
@@ -3800,7 +3816,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 
 				/* Perhaps we didn't install newextra anywhere */
 				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
+					free_extra_value(record, newextra);
 				break;
 
 #undef newval
@@ -3839,7 +3855,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 				{
 					/* Release newextra, unless it's reset_extra */
 					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
+						free_extra_value(record, newextra);
 
 					if (*conf->variable != newval)
 					{
@@ -3896,7 +3912,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 
 				/* Perhaps we didn't install newextra anywhere */
 				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
+					free_extra_value(record, newextra);
 				break;
 
 #undef newval
@@ -3964,7 +3980,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 						guc_free(newval);
 					/* Release newextra, unless it's reset_extra */
 					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
+						free_extra_value(record, newextra);
 
 					if (newval_different)
 					{
@@ -4064,7 +4080,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 					guc_free(newval);
 				/* Perhaps we didn't install newextra anywhere */
 				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
+					free_extra_value(record, newextra);
 				break;
 
 #undef newval
@@ -4103,7 +4119,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 				{
 					/* Release newextra, unless it's reset_extra */
 					if (newextra && !extra_field_used(record, newextra))
-						guc_free(newextra);
+						free_extra_value(record, newextra);
 
 					if (*conf->variable != newval)
 					{
@@ -4160,7 +4176,7 @@ set_config_with_handle(const char *name, config_handle *handle,
 
 				/* Perhaps we didn't install newextra anywhere */
 				if (newextra && !extra_field_used(record, newextra))
-					guc_free(newextra);
+					free_extra_value(record, newextra);
 				break;
 
 #undef newval
@@ -4612,7 +4628,7 @@ AlterSystemSetConfigFile(AlterSystemStmt *altersysstmt)
 
 				if (record->vartype == PGC_STRING && newval.stringval != NULL)
 					guc_free(newval.stringval);
-				guc_free(newextra);
+				free_extra_value(record, newextra);
 			}
 		}
 		else
@@ -6152,7 +6168,7 @@ RestoreGUCState(void *gucstate)
 		 * in.
 		 */
 		Assert(gconf->stack == NULL);
-		guc_free(gconf->extra);
+		free_extra_value(gconf, gconf->extra);
 		guc_free(gconf->last_reported);
 		guc_free(gconf->sourcefile);
 		switch (gconf->vartype)
@@ -6174,7 +6190,7 @@ RestoreGUCState(void *gucstate)
 				}
 		}
 		if (gconf->reset_extra && gconf->reset_extra != gconf->extra)
-			guc_free(gconf->reset_extra);
+			free_extra_value(gconf, gconf->reset_extra);
 		/* Remove it from any lists it's in. */
 		RemoveGUCFromLists(gconf);
 		/* Now we can reset the struct to PGS_S_DEFAULT state. */
@@ -6703,6 +6719,11 @@ call_bool_check_hook(const struct config_generic *conf, bool *newval, void **ext
 				 errhint("%s", GUC_check_errhint_string) : 0));
 		/* Flush strings created in ErrorContext (ereport might not have) */
 		FlushErrorState();
+
+		if (*extra) 
+			free_extra_value(conf, *extra);
+		*extra = NULL;
+
 		return false;
 	}
 
@@ -6737,6 +6758,11 @@ call_int_check_hook(const struct config_generic *conf, int *newval, void **extra
 				 errhint("%s", GUC_check_errhint_string) : 0));
 		/* Flush strings created in ErrorContext (ereport might not have) */
 		FlushErrorState();
+
+		if (*extra) 
+			free_extra_value(conf, *extra);
+		*extra = NULL;
+
 		return false;
 	}
 
@@ -6771,6 +6797,11 @@ call_real_check_hook(const struct config_generic *conf, double *newval, void **e
 				 errhint("%s", GUC_check_errhint_string) : 0));
 		/* Flush strings created in ErrorContext (ereport might not have) */
 		FlushErrorState();
+
+		if (*extra) 
+			free_extra_value(conf, *extra);
+		*extra = NULL;
+
 		return false;
 	}
 
@@ -6814,6 +6845,11 @@ call_string_check_hook(const struct config_generic *conf, char **newval, void **
 					 errhint("%s", GUC_check_errhint_string) : 0));
 			/* Flush strings created in ErrorContext (ereport might not have) */
 			FlushErrorState();
+
+			if (*extra)
+				free_extra_value(conf, *extra);
+			*extra = NULL;
+
 			result = false;
 		}
 	}
@@ -6856,6 +6892,11 @@ call_enum_check_hook(const struct config_generic *conf, int *newval, void **extr
 				 errhint("%s", GUC_check_errhint_string) : 0));
 		/* Flush strings created in ErrorContext (ereport might not have) */
 		FlushErrorState();
+
+		if (*extra) 
+			free_extra_value(conf, *extra);
+		*extra = NULL;
+
 		return false;
 	}
 
